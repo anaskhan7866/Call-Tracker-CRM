@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-md-7 col-lg-5">
+        <div class="card text-center p-4">
+            <div class="card-body">
+                <!-- Icon Header -->
+                <div class="mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle" style="width: 80px; height: 80px;">
+                        <i class="bi bi-file-earmark-spreadsheet fs-1"></i>
+                    </div>
+                </div>
+                
+                <h4 class="fw-bold mb-2">Import Lead Data</h4>
+                <p class="text-muted mb-4 small">
+                    Ensure your Excel sheet (.xlsx) has columns named exactly <span class="badge bg-secondary">Cx Name</span> and <span class="badge bg-secondary">Contact</span>.
+                </p>
+
+                <form method="POST" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <!-- Styled File Input -->
+                    <div class="border rounded p-3 mb-4 bg-light text-start border-dashed" style="border-style: dashed !important; border-width: 2px !important;">
+                        <label for="excel_file" class="form-label fw-medium text-dark mb-1 small">Select File</label>
+                        <input class="form-control form-control-sm shadow-none" type="file" id="excel_file" name="excel_file" accept=".xlsx, .xls" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100 py-2 d-flex justify-content-center align-items-center gap-2 shadow-sm">
+                        <i class="bi bi-cloud-arrow-up-fill"></i> Upload & Process Pipeline
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

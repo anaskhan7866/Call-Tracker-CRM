@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- Header Section -->
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+        <h3 class="mb-0 fw-bold text-dark">Lead Directory</h3>
+        <p class="text-muted mb-0 small">Manage and update customer call statuses</p>
+    </div>
+    
+    <div class="d-flex gap-2 align-items-center">
+        <!-- Upgraded Search Bar with Icon & Button -->
+        <form method="GET" action="" class="d-flex gap-2 align-items-center">
+            <div class="position-relative">
+                <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                <input type="text" name="q" class="form-control ps-5 rounded-pill shadow-sm" style="width: 250px;" value="{{ query }}" placeholder="Search Cx Name...">
+            </div>
+            
+            <button type="submit" class="btn btn-primary rounded-pill shadow-sm px-4">Search</button>
+            
+            {% if query %}
+                <a href="{% url 'contact_list' %}" class="btn btn-light rounded-pill shadow-sm px-3" title="Clear Search">
+                    Clear
+                </a>
+            {% endif %}
+        </form>
+
+        <a href="{% url 'export_excel' %}" class="btn btn-success rounded-pill shadow-sm d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-excel"></i> Export
+        </a>
+    </div>
+</div>
+
+<!-- Auto-Save Notification Toast -->
+<div id="autosave-toast" class="alert alert-success d-none position-fixed top-0 end-0 m-4 shadow-lg toast-notification" role="alert">
+    <i class="bi bi-check-circle-fill me-2"></i> Record updated successfully
+</div>
+
+<!-- Main Data Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="text-secondary fw-semibold py-3 ps-4" style="font-size: 0.85rem;">CX NAME</th>
+                        <th class="text-secondary fw-semibold py-3" style="font-size: 0.85rem;">CONTACT</th>
+                        <th class="text-secondary fw-semibold py-3" style="font-size: 0.85rem; width: 180px;">CALL STATUS</th>
+                        <th class="text-secondary fw-semibold py-3" style="font-size: 0.85rem;">DESCRIPTION</th>
+                        <th class="text-secondary fw-semibold py-3 pe-4 text-center" style="font-size: 0.85rem; width: 100px;">ACTION</th>
+                    </tr>
+                </thead>
+                <tbody class="border-top-0">
+                    {% for contact in page_obj %}
+                    <tr>
+                        <td class="ps-4 fw-medium text-dark">{{ contact.name }}</td>
+                        <td class="text-muted">{{ contact.phone_number }}</td>
+                        <td>
+                            <!-- Updated Dropdown Emojis -->
+                            <select id="status_{{ contact.id }}" class="form-select form-select-sm bg-light border-0 shadow-none">
+                                <option value="Pending" {% if contact.call_status == 'Pending' %}selected{% endif %}>🔴 Pending</option>
+                                <option value="Connected" {% if contact.call_status == 'Connected' %}selected{% endif %}>🟢 Connected</option>
+                                <option value="Not Connected" {% if contact.call_status == 'Not Connected' %}selected{% endif %}>🟡 Not Connected</option>
+                            </select>
+                        </td>
+                        <td>
+                            <textarea id="desc_{{ contact.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" rows="1" placeholder="Add notes...">{% if contact.description and contact.description != 'None' %}{{ contact.description }}{% endif %}</textarea>
+                        </td>
+                        <td class="pe-4 text-center">
+                            <button type="button" class="btn btn-sm btn-light text-primary fw-semibold save-row-btn w-100" data-id="{{ contact.id }}">
+                                Save
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <i class="bi bi-inbox text-muted" style="font-size: 2.5rem;"></i>
+                            <p class="mt-3 text-muted fw-medium">No contacts found in the database.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Pagination -->
+    <div class="card-footer bg-white border-top py-3">
+        <nav>
+            <ul class="pagination justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link shadow-sm text-dark border-0 rounded ms-1" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}">
+                            <i class="bi bi-chevron-left"></i> Prev
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link border-0 rounded ms-1 text-muted"><i class="bi bi-chevron-left"></i> Prev</span></li>
+                {% endif %}
+
+                <li class="page-item active" aria-current="page">
+                    <span class="page-link bg-primary border-0 rounded mx-2 shadow-sm px-3">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link shadow-sm text-dark border-0 rounded me-1" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link border-0 rounded me-1 text-muted">Next <i class="bi bi-chevron-right"></i></span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<!-- JavaScript for Row-by-Row Save -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        document.querySelectorAll('.save-row-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const contactId = this.dataset.id;
+                const statusValue = document.getElementById('status_' + contactId).value;
+                const descValue = document.getElementById('desc_' + contactId).value;
+                
+                const originalText = this.innerHTML;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                this.disabled = true;
+
+                fetch('{% url "auto_update_contact" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken
+                    },
+                    body: JSON.stringify({
+                        id: contactId,
+                        status: statusValue,
+                        description: descValue
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if(data.success) {
+                        this.innerHTML = '<i class="bi bi-check2"></i>';
+                        this.classList.replace('btn-light', 'btn-success');
+                        this.classList.replace('text-primary', 'text-white');
+                        
+                        const toast = document.getElementById('autosave-toast');
+                        toast.classList.remove('d-none');
+                        
+                        setTimeout(() => {
+                            this.innerHTML = originalText;
+                            this.classList.replace('btn-success', 'btn-light');
+                            this.classList.replace('text-white', 'text-primary');
+                            this.disabled = false;
+                            toast.classList.add('d-none');
+                        }, 2000);
+                    } else {
+                        alert("Error saving data!");
+                        this.innerHTML = originalText;
+                        this.disabled = false;
+                    }
+                });
+            });
+        });
+    });
+</script>
+{% endblock %}

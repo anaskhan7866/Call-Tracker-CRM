@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-0 fw-bold text-dark">Analytics Dashboard</h3>
+        <p class="text-muted mb-0 small">Live overview of lead conversion metrics</p>
+    </div>
+    <a href="{% url 'contact_list' %}" class="btn btn-primary rounded-pill shadow-sm">
+        <i class="bi bi-people"></i> Manage Leads
+    </a>
+</div>
+
+<!-- KPI Cards -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-primary text-white shadow-sm h-100">
+            <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
+                <h6 class="card-title text-uppercase fw-semibold mb-2 opacity-75">Total Leads Processed</h6>
+                <h2 class="display-4 fw-bold mb-0">{{ total_leads }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-4">
+    <!-- Donut Chart -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                <h6 class="fw-bold text-dark mb-0">Lead Status Distribution</h6>
+            </div>
+            <div class="card-body d-flex justify-content-center align-items-center" style="position: relative; height:300px;">
+                <canvas id="statusDonutChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bar Chart -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                <h6 class="fw-bold text-dark mb-0">Conversion Volume</h6>
+            </div>
+            <div class="card-body" style="position: relative; height:300px;">
+                <canvas id="statusBarChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Data passed dynamically from Django
+        const labels = {{ labels|safe }};
+        const dataCounts = {{ counts|safe }};
+        
+        // Map specific colors to specific text labels
+        const colorConfig = {
+            'Connected': { bg: 'rgba(40, 167, 69, 0.8)', border: 'rgba(40, 167, 69, 1)' },       // Green
+            'Not Connected': { bg: 'rgba(255, 193, 7, 0.8)', border: 'rgba(211, 158, 0, 1)' },   // Yellow
+            'Pending': { bg: 'rgba(220, 53, 69, 0.8)', border: 'rgba(220, 53, 69, 1)' }          // Red
+        };
+
+        // Automatically assign colors based on the label name
+        const backgroundColors = labels.map(label => colorConfig[label] ? colorConfig[label].bg : 'rgba(200, 200, 200, 0.8)');
+        const borderColors = labels.map(label => colorConfig[label] ? colorConfig[label].border : 'rgba(150, 150, 150, 1)');
+
+        // 1. Initialize Donut Chart
+        const ctxDonut = document.getElementById('statusDonutChart').getContext('2d');
+        new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: dataCounts,
+                    backgroundColor: backgroundColors,
+                    borderColor: borderColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        // 2. Initialize Bar Chart
+        const ctxBar = document.getElementById('statusBarChart').getContext('2d');
+        new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Number of Leads',
+                    data: dataCounts,
+                    backgroundColor: backgroundColors,
+                    borderColor: borderColors,
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
