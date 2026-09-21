@@ -48,7 +48,7 @@
                         <th class="text-secondary fw-semibold py-3" style="font-size: 0.85rem;">CONTACT</th>
                         <th class="text-secondary fw-semibold py-3" style="font-size: 0.85rem; width: 180px;">CALL STATUS</th>
                         <th class="text-secondary fw-semibold py-3" style="font-size: 0.85rem;">DESCRIPTION</th>
-                        <th class="text-secondary fw-semibold py-3 pe-4 text-center" style="font-size: 0.85rem; width: 100px;">ACTION</th>
+                        <th class="text-secondary fw-semibold py-3 pe-4 text-center" style="font-size: 0.85rem; width: 150px;">ACTION</th>
                     </tr>
                 </thead>
                 <tbody class="border-top-0">
@@ -64,12 +64,57 @@
                             </select>
                         </td>
                         <td>
-                            <textarea id="desc_{{ contact.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" rows="1" placeholder="Add notes...">{% if contact.description and contact.description != 'None' %}{{ contact.description }}{% endif %}</textarea>
+                            <textarea id="desc_{{ contact.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" rows="2" placeholder="Add notes...">{% if contact.description and contact.description != 'None' %}{{ contact.description }}{% endif %}</textarea>
                         </td>
                         <td class="pe-4 text-center">
-                            <button type="button" class="btn btn-sm btn-light text-primary fw-semibold save-row-btn w-100" data-id="{{ contact.id }}">
-                                Save
-                            </button>
+                            <div class="d-flex flex-column gap-2">
+                                
+                                <!-- Upgraded WhatsApp Dropdown Menu -->
+                                <div class="dropdown w-100">
+                                    <button class="btn btn-sm btn-success text-white fw-semibold w-100 shadow-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi bi-whatsapp"></i> Chat
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow shadow-sm" style="font-size: 0.85rem;">
+                                        
+                                        <!-- Not Connected Script -->
+                                        <li><h6 class="dropdown-header text-danger fw-bold">Not Connected</h6></li>
+                                        <li>
+                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, we tried reaching you regarding our trading platform but couldn't connect. Please let me know a good time to call back!">
+                                                <i class="bi bi-telephone-x me-2 text-muted"></i>Send Missed Call Script
+                                            </a>
+                                        </li>
+                                        
+                                        <li><hr class="dropdown-divider"></li>
+                                        
+                                        <!-- Connected Market Scripts -->
+                                        <li><h6 class="dropdown-header text-success fw-bold">Connected (Select Market)</h6></li>
+                                        
+                                        <li>
+                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, as discussed today, here is the information and next steps for trading in the Indian Stock Market.">
+                                                <i class="bi bi-graph-up-arrow me-2 text-muted"></i>Indian Stock Market
+                                            </a>
+                                        </li>
+                                        
+                                        <li>
+                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, as discussed today, here is the information regarding Global / Forex Markets.">
+                                                <i class="bi bi-globe-americas me-2 text-muted"></i>Global / Absel Market
+                                            </a>
+                                        </li>
+                        
+                                        <li>
+                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, as discussed today, here is the information regarding Cryptocurrency trading.">
+                                                <i class="bi bi-currency-bitcoin me-2 text-muted"></i>Crypto Market
+                                            </a>
+                                        </li>
+                                        
+                                    </ul>
+                                </div>
+                                
+                                <!-- Existing Save Button -->
+                                <button type="button" class="btn btn-sm btn-light text-primary fw-semibold save-row-btn w-100" data-id="{{ contact.id }}">
+                                    Save
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
