@@ -84,7 +84,9 @@ def contact_list(request):
     
     if cleaned_query:
         escaped_query = re.escape(cleaned_query)
-        regex_pattern = rf'^{escaped_query}$'
+        
+        # NEW REGEX: Matches the exact name, and forgives trailing dots, dashes, or spaces
+        regex_pattern = rf'^{escaped_query}[^a-zA-Z0-9]*$'
         
         contacts = Contact.objects.filter(
             Q(name__iregex=regex_pattern) | Q(phone_number__icontains=cleaned_query)
