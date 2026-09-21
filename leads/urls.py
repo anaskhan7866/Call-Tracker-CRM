@@ -1,8 +1,10 @@
 from django.urls import path
 from . import views
-
+from leads import views
+from django.contrib import admin
 urlpatterns = [
-    path('', views.upload_excel, name='upload_excel'),
+    path('admin/', admin.site.urls),
+    path('', views.landing_page, name='landing_page'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('contacts/', views.contact_list, name='contact_list'),
     path('contacts/update/', views.update_contacts, name='update_contacts'),

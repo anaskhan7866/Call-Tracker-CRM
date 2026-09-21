@@ -183,3 +183,6 @@ def dashboard(request):
     }
     
     return render(request, 'dashboard.html', context)
+
+def landing_page(request):
+    return render(request, 'index.html')
