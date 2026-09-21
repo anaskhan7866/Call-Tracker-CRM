@@ -139,11 +139,6 @@ def auto_update_contact(request):
             if 'description' in data:
                 contact.description = data['description']
                 
-            # NEW LOGIC: Save the date (or clear it if empty)
-            if 'follow_up_date' in data:
-                date_val = data['follow_up_date']
-                contact.follow_up_date = date_val if date_val else None
-                
             contact.save()
             return JsonResponse({'success': True})
         except Exception as e:
