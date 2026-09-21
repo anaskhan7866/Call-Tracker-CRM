@@ -53,7 +53,33 @@ def upload_excel(request):
 
 @login_required
 def contact_list(request):
+    # 1. If user clicks "Clear", wipe the search query and restore the pre-search page
+    if 'clear' in request.GET:
+        request.session['last_query'] = ''
+        restore_page = request.session.get('pre_search_page', 1)
+        return redirect(f"/contacts/?page={restore_page}")
+
+    # 2. If user clicks "View Contacts" from navbar, restore their exact last state
+    if not request.GET and 'last_page' in request.session:
+        last_page = request.session.get('last_page', 1)
+        last_query = request.session.get('last_query', '')
+        
+        redirect_url = f"/contacts/?page={last_page}"
+        if last_query:
+            redirect_url += f"&q={last_query}"
+        return redirect(redirect_url)
+
+    # 3. Process the current request
     raw_query = request.GET.get('q', '')
+    page_number = request.GET.get('page', 1)
+    
+    # If they are NOT searching right now, save this page as the safe return point
+    if not raw_query:
+        request.session['pre_search_page'] = page_number
+        
+    request.session['last_query'] = raw_query
+    request.session['last_page'] = page_number
+    
     cleaned_query = " ".join(raw_query.split())
     
     if cleaned_query:
@@ -67,7 +93,6 @@ def contact_list(request):
         contacts = Contact.objects.all().order_by('id')
 
     paginator = Paginator(contacts, 10)
-    page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
     return render(request, 'contact_list.html', {'page_obj': page_obj, 'query': raw_query})

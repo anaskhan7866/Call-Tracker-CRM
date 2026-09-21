@@ -19,7 +19,8 @@
             <button type="submit" class="btn btn-primary rounded-pill shadow-sm px-4">Search</button>
             
             {% if query %}
-                <a href="{% url 'contact_list' %}" class="btn btn-light rounded-pill shadow-sm px-3" title="Clear Search">
+                <!-- Updated URL to trigger the ?clear=1 session reset logic -->
+                <a href="{% url 'contact_list' %}?clear=1" class="btn btn-light rounded-pill shadow-sm px-3" title="Clear Search">
                     Clear
                 </a>
             {% endif %}
@@ -56,7 +57,6 @@
                         <td class="ps-4 fw-medium text-dark">{{ contact.name }}</td>
                         <td class="text-muted">{{ contact.phone_number }}</td>
                         <td>
-                            <!-- Updated Dropdown Emojis -->
                             <select id="status_{{ contact.id }}" class="form-select form-select-sm bg-light border-0 shadow-none">
                                 <option value="Pending" {% if contact.call_status == 'Pending' %}selected{% endif %}>🔴 Pending</option>
                                 <option value="Connected" {% if contact.call_status == 'Connected' %}selected{% endif %}>🟢 Connected</option>
