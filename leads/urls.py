@@ -11,6 +11,6 @@ urlpatterns = [
     
     # This is the line your app is looking for:
     path('contacts/auto-update/', views.auto_update_contact, name='auto_update_contact'), 
-    path('upload_excel/', views.upload_view, name='upload_excel'),
+    path('upload_excel/', views.upload_excel, name='upload_excel'),
     path('contacts/export/', views.export_excel, name='export_excel'),
 ]
