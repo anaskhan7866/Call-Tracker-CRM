@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-$o#^$*@=38c*@cmm(r2!n8v2702d*c@uk$izivh7^dqjgh#(&+'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
@@ -133,7 +133,10 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGIN_REDIRECT_URL = '/dashboard/'
-LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+# FIX FOR ISSUES 1 & 3: Change this from '/accounts/login/' to '/'
+# This ensures that standard users and admin users are redirected to the landing page on logout.
+LOGOUT_REDIRECT_URL = '/'
 
 # ==========================================
 # JAZZMIN ADMIN UI CONFIGURATION
@@ -149,7 +152,9 @@ JAZZMIN_SETTINGS = {
 }
 
 JAZZMIN_UI_TWEAKS = {
-    "navbar": "navbar-dark",
+    # FIX FOR ISSUE 2: Change "navbar-dark" to "navbar-white navbar-light"
+    # Bootstrap's 'navbar-dark' forces text to be white. Changing to 'navbar-light' forces text to be dark, making it visible against the white background.
+    "navbar": "navbar-white navbar-light",
     "theme": "lumen",
     "sidebar": "sidebar-dark-primary",
     "sidebar_nav_child_indent": True,

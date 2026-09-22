@@ -8,6 +8,7 @@ from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from .models import Contact
+from datetime import date
 
 @login_required
 def upload_excel(request):
@@ -139,6 +140,11 @@ def auto_update_contact(request):
             if 'description' in data:
                 contact.description = data['description']
                 
+            # Save the reminder date
+            if 'reminder_date' in data:
+                date_val = data['reminder_date']
+                contact.reminder_date = date_val if date_val else None
+                
             contact.save()
             return JsonResponse({'success': True})
         except Exception as e:
@@ -176,10 +182,17 @@ def dashboard(request):
         labels.append(metric['call_status'])
         counts.append(metric['total'])
         
+    # Fetch today's reminders AND overdue reminders
+    today = date.today()
+    # Notice the __lte (Less Than or Equal to)
+    todays_reminders = Contact.objects.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
+        
     context = {
         'total_leads': total_leads,
         'labels': labels,
         'counts': counts,
+        'todays_reminders': todays_reminders,
+        'today': today, # Pass today's date to the template for red badges
     }
     
     return render(request, 'dashboard.html', context)
