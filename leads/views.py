@@ -9,7 +9,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.cache import never_cache
 from .models import Contact
-from datetime import date
+# REMOVE: from datetime import date
+from django.utils import timezone # ADD THIS INSTEAD
 
 @never_cache
 @login_required
@@ -219,8 +220,9 @@ def dashboard(request):
         counts.append(metric['total'])
         
     # Fetch today's reminders AND overdue reminders
-    today = date.today()
-    todays_reminders = base_contacts.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
+    today = timezone.localdate() # ADD THIS INSTEAD
+
+    todays_reminders = Contact.objects.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
         
     context = {
         'total_leads': total_leads,
