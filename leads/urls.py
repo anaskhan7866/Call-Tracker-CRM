@@ -3,7 +3,7 @@ from . import views
 from leads import views
 from django.contrib import admin
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # path('admin/', admin.site.urls),
     path('', views.landing_page, name='landing_page'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('contacts/', views.contact_list, name='contact_list'),
