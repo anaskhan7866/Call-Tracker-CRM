@@ -7,9 +7,11 @@ from django.db.models import Q, Count
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.cache import never_cache
 from .models import Contact
 from datetime import date
 
+@never_cache
 @login_required
 def upload_excel(request):
     if request.method == 'POST':
@@ -38,6 +40,7 @@ def upload_excel(request):
                 clean_phone = " ".join(str(row.get('contact', '')).split())
                 
                 Contact.objects.create(
+                    user=request.user,
                     name=clean_name,
                     phone_number=clean_phone
                 )
@@ -52,6 +55,7 @@ def upload_excel(request):
         
     return render(request, 'upload.html')
 
+@never_cache
 @login_required
 def contact_list(request):
     # 1. If user clicks "Clear", wipe the search query and restore the pre-search page
@@ -83,34 +87,47 @@ def contact_list(request):
     
     cleaned_query = " ".join(raw_query.split())
     
+    # Admins see all contacts, normal users only see their own
+    if request.user.is_staff or request.user.is_superuser:
+        base_contacts = Contact.objects.all()
+    else:
+        base_contacts = Contact.objects.filter(user=request.user)
+    
     if cleaned_query:
         escaped_query = re.escape(cleaned_query)
         
-        # NEW REGEX: Matches the exact name, and forgives trailing dots, dashes, or spaces
+        # REGEX: Matches the exact name, and forgives trailing dots, dashes, or spaces
         regex_pattern = rf'^{escaped_query}[^a-zA-Z0-9]*$'
         
-        contacts = Contact.objects.filter(
+        contacts = base_contacts.filter(
             Q(name__iregex=regex_pattern) | Q(phone_number__icontains=cleaned_query)
         ).order_by('id')
     else:
-        contacts = Contact.objects.all().order_by('id')
+        contacts = base_contacts.order_by('id')
 
     paginator = Paginator(contacts, 10)
     page_obj = paginator.get_page(page_number)
 
     return render(request, 'contact_list.html', {'page_obj': page_obj, 'query': raw_query})
 
+@never_cache
 @login_required
 def update_contacts(request):
     if request.method == 'POST':
         page = request.POST.get('current_page', 1)
         query = request.POST.get('current_query', '')
         
+        # Determine base queryset for security
+        if request.user.is_staff or request.user.is_superuser:
+            base_contacts = Contact.objects.all()
+        else:
+            base_contacts = Contact.objects.filter(user=request.user)
+            
         for key, value in request.POST.items():
             if key.startswith('status_'):
                 contact_id = key.split('_')[1]
                 try:
-                    contact = Contact.objects.get(id=contact_id)
+                    contact = base_contacts.get(id=contact_id)
                     contact.call_status = value
                     contact.description = request.POST.get(f'desc_{contact_id}', '')
                     contact.save()
@@ -126,13 +143,19 @@ def update_contacts(request):
         
     return redirect('contact_list')
 
+@never_cache
 @login_required
 def auto_update_contact(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             contact_id = data.get('id')
-            contact = Contact.objects.get(id=contact_id)
+            
+            # Security: Ensure they can only update their own leads via AJAX
+            if request.user.is_staff or request.user.is_superuser:
+                contact = Contact.objects.get(id=contact_id)
+            else:
+                contact = Contact.objects.get(id=contact_id, user=request.user)
             
             if 'status' in data:
                 contact.call_status = data['status']
@@ -151,9 +174,15 @@ def auto_update_contact(request):
             return JsonResponse({'success': False, 'error': str(e)})
     return JsonResponse({'success': False, 'error': 'Invalid request'})
 
+@never_cache
 @login_required
 def export_excel(request):
-    contacts = Contact.objects.all().values('name', 'phone_number', 'call_status', 'description')
+    if request.user.is_staff or request.user.is_superuser:
+        contacts = Contact.objects.all()
+    else:
+        contacts = Contact.objects.filter(user=request.user)
+        
+    contacts = contacts.values('name', 'phone_number', 'call_status', 'description')
     df = pd.DataFrame(list(contacts))
     
     if not df.empty:
@@ -170,10 +199,17 @@ def export_excel(request):
     df.to_excel(response, index=False)
     return response
 
+@never_cache
 @login_required
 def dashboard(request):
-    total_leads = Contact.objects.count()
-    status_metrics = Contact.objects.values('call_status').annotate(total=Count('call_status'))
+    # Filter for dashboard metrics
+    if request.user.is_staff or request.user.is_superuser:
+        base_contacts = Contact.objects.all()
+    else:
+        base_contacts = Contact.objects.filter(user=request.user)
+        
+    total_leads = base_contacts.count()
+    status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
     
     labels = []
     counts = []
@@ -184,8 +220,7 @@ def dashboard(request):
         
     # Fetch today's reminders AND overdue reminders
     today = date.today()
-    # Notice the __lte (Less Than or Equal to)
-    todays_reminders = Contact.objects.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
+    todays_reminders = base_contacts.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
         
     context = {
         'total_leads': total_leads,
@@ -197,5 +232,6 @@ def dashboard(request):
     
     return render(request, 'dashboard.html', context)
 
+@never_cache
 def landing_page(request):
     return render(request, 'index.html')
