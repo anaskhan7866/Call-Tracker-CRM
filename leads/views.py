@@ -311,22 +311,23 @@ def get_daily_call_details(request):
     date_str = request.GET.get('date') 
     
     try:
+        # FIX: Removed .values() so Django formats the SQLite datetime correctly
         calls = Contact.objects.filter(
             user_id=user_id,
             last_updated__date=date_str
-        ).exclude(call_status='Pending').values(
-            'name', 'phone_number', 'call_status', 'description', 'last_updated'
-        ).order_by('-last_updated')
+        ).exclude(call_status='Pending').order_by('-last_updated')
         
         call_list = []
         for call in calls:
-            local_time = timezone.localtime(call['last_updated'])
+            # Convert the proper model datetime to local time (IST)
+            local_time = timezone.localtime(call.last_updated)
+            
             call_list.append({
-                'name': call['name'],
-                'phone': call['phone_number'],
-                'status': call['call_status'],
-                'description': call['description'] or '-',
-                'time': call['last_updated'].strftime('%I:%M %p')
+                'name': call.name,
+                'phone': call.phone_number,
+                'status': call.call_status,
+                'description': call.description or '-',
+                'time': local_time.strftime('%I:%M %p')
             })
             
         return JsonResponse({'success': True, 'calls': call_list})
