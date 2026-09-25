@@ -9,10 +9,9 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.cache import never_cache
 from .models import Contact
-# REMOVE: from datetime import date
 from django.db.models.functions import TruncDate
 from django.contrib.auth.models import User
-from django.utils import timezone # ADD THIS INSTEAD
+from django.utils import timezone 
 
 @never_cache
 @login_required
@@ -206,12 +205,6 @@ def export_excel(request):
     df.to_excel(response, index=False)
     return response
 
-from django.contrib.auth.models import User
-from django.db.models import Count, Q
-from django.db.models.functions import TruncDate
-from django.utils import timezone
-from .models import Contact
-
 @never_cache
 @login_required
 def dashboard(request):
@@ -228,7 +221,17 @@ def dashboard(request):
                 Q(name__icontains=search_query) | Q(phone_number__icontains=search_query)
             ).select_related('user').order_by('-last_updated')[:50]
 
-        # REMOVED contact__is_active=True from all metrics so admin sees everything
+        # Calculate company-wide aggregate totals
+        company_stats = Contact.objects.aggregate(
+            total_leads=Count('id'),
+            pending=Count('id', filter=Q(call_status='Pending')),
+            total_called=Count('id', filter=~Q(call_status='Pending')),
+            called_today=Count('id', filter=~Q(call_status='Pending') & Q(last_updated__date=today)),
+            connected=Count('id', filter=Q(call_status='Connected')),
+            not_connected=Count('id', filter=Q(call_status='Not Connected'))
+        )
+
+        # Employee metrics
         employees = User.objects.filter(is_superuser=False, is_staff=False).annotate(
             total_leads=Count('contact'),
             pending=Count('contact', filter=Q(contact__call_status='Pending')),
@@ -238,7 +241,7 @@ def dashboard(request):
             not_connected=Count('contact', filter=Q(contact__call_status='Not Connected'))
         ).order_by('username')
         
-        # REMOVED is_active=True from daily history so past calls still show up
+        # Daily history
         daily_history_raw = Contact.objects.filter(
             ~Q(call_status='Pending'), 
             last_updated__isnull=False
@@ -266,11 +269,12 @@ def dashboard(request):
             'employees': employees,
             'search_query': search_query,
             'search_results': search_results,
+            'company_stats': company_stats,
         }
         return render(request, 'dashboard.html', context)
         
     else:
-        # --- TELECALLER DASHBOARD (Keep exact same code) ---
+        # --- TELECALLER DASHBOARD ---
         base_contacts = Contact.objects.filter(user=request.user, is_active=True)
         total_leads = base_contacts.count()
         status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
@@ -297,8 +301,6 @@ def dashboard(request):
 def landing_page(request):
     return render(request, 'index.html')
 
-
-# Add this at the bottom of your leads/views.py
 @never_cache
 @login_required
 def get_daily_call_details(request):
@@ -309,7 +311,6 @@ def get_daily_call_details(request):
     date_str = request.GET.get('date') 
     
     try:
-        # REMOVED is_active=True so clicking a historical date shows the old calls
         calls = Contact.objects.filter(
             user_id=user_id,
             last_updated__date=date_str
@@ -319,6 +320,7 @@ def get_daily_call_details(request):
         
         call_list = []
         for call in calls:
+            local_time = timezone.localtime(call['last_updated'])
             call_list.append({
                 'name': call['name'],
                 'phone': call['phone_number'],
