@@ -217,9 +217,13 @@ def dashboard(request):
         search_results = None
         
         if search_query:
+            
             search_results = Contact.objects.filter(
-                Q(name__icontains=search_query) | Q(phone_number__icontains=search_query)
-            ).select_related('user').order_by('-last_updated')[:50]
+            # Matches if the name starts with the query OR if the query appears as a separate word (with a space)
+            Q(name__istartswith=search_query) | 
+            Q(name__icontains=f" {search_query}") | 
+            Q(phone_number__icontains=search_query)
+        ).select_related('user').order_by('-last_updated')[:50]
 
         # Calculate company-wide aggregate totals
         company_stats = Contact.objects.aggregate(
