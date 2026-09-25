@@ -3,20 +3,13 @@ from .models import Contact
 
 @admin.register(Contact)
 class ContactAdmin(admin.ModelAdmin):
-    # The columns that will show up in the admin table
-    list_display = ('id', 'name', 'phone_number', 'call_status', 'description')
+    # Added 'user' and 'is_active' to the display
+    list_display = ('id', 'name', 'phone_number', 'call_status', 'user', 'is_active')
     
-    # Adds a sidebar filter to quickly sort by status
-    list_filter = ('call_status',)
+    # Added 'is_active' and 'user' to the sidebar filters
+    list_filter = ('call_status', 'is_active', 'user')
     
-    # Adds a search bar at the top to search by name or phone
     search_fields = ('name', 'phone_number')
-    
-    # Makes the ID and Name clickable to edit the record
     list_display_links = ('id', 'name')
-    
-    # Default sorting (newest first or by ID)
     ordering = ('id',)
-    
-    # Shows 50 leads per page in the admin panel
     list_per_page = 50

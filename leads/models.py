@@ -17,6 +17,8 @@ class Contact(models.Model):
     call_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     description = models.TextField(blank=True, null=True)
     reminder_date = models.DateField(blank=True, null=True)
+
+    is_active = models.BooleanField(default=True)
     
     def __str__(self):
         return self.name

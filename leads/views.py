@@ -92,7 +92,7 @@ def contact_list(request):
     if request.user.is_staff or request.user.is_superuser:
         base_contacts = Contact.objects.all()
     else:
-        base_contacts = Contact.objects.filter(user=request.user)
+        base_contacts = Contact.objects.filter(user=request.user, is_active=True)
     
     if cleaned_query:
         escaped_query = re.escape(cleaned_query)
@@ -122,7 +122,7 @@ def update_contacts(request):
         if request.user.is_staff or request.user.is_superuser:
             base_contacts = Contact.objects.all()
         else:
-            base_contacts = Contact.objects.filter(user=request.user)
+            base_contacts = Contact.objects.filter(user=request.user, is_active=True)
             
         for key, value in request.POST.items():
             if key.startswith('status_'):
@@ -156,7 +156,7 @@ def auto_update_contact(request):
             if request.user.is_staff or request.user.is_superuser:
                 contact = Contact.objects.get(id=contact_id)
             else:
-                contact = Contact.objects.get(id=contact_id, user=request.user)
+                contact = Contact.objects.get(id=contact_id, user=request.user, is_active=True)
             
             if 'status' in data:
                 contact.call_status = data['status']
@@ -181,7 +181,7 @@ def export_excel(request):
     if request.user.is_staff or request.user.is_superuser:
         contacts = Contact.objects.all()
     else:
-        contacts = Contact.objects.filter(user=request.user)
+        contacts = Contact.objects.filter(user=request.user, is_active=True)
         
     contacts = contacts.values('name', 'phone_number', 'call_status', 'description')
     df = pd.DataFrame(list(contacts))
@@ -207,7 +207,7 @@ def dashboard(request):
     if request.user.is_staff or request.user.is_superuser:
         base_contacts = Contact.objects.all()
     else:
-        base_contacts = Contact.objects.filter(user=request.user)
+        base_contacts = Contact.objects.filter(user=request.user, is_active=True)
         
     total_leads = base_contacts.count()
     status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
@@ -220,16 +220,17 @@ def dashboard(request):
         counts.append(metric['total'])
         
     # Fetch today's reminders AND overdue reminders
-    today = timezone.localdate() # ADD THIS INSTEAD
+    today = timezone.localdate()
 
-    todays_reminders = Contact.objects.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
+    # FIX: Use base_contacts instead of Contact.objects
+    todays_reminders = base_contacts.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
         
     context = {
         'total_leads': total_leads,
         'labels': labels,
         'counts': counts,
         'todays_reminders': todays_reminders,
-        'today': today, # Pass today's date to the template for red badges
+        'today': today, 
     }
     
     return render(request, 'dashboard.html', context)
