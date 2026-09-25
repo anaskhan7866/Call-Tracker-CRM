@@ -233,7 +233,9 @@ def dashboard(request):
             total_leads=Count('contact'),
             pending=Count('contact', filter=Q(contact__call_status='Pending')),
             total_called=Count('contact', filter=~Q(contact__call_status='Pending')),
-            called_today=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__last_updated__date=today))
+            called_today=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__last_updated__date=today)),
+            connected=Count('contact', filter=Q(contact__call_status='Connected')),
+            not_connected=Count('contact', filter=Q(contact__call_status='Not Connected'))
         ).order_by('username')
         
         # REMOVED is_active=True from daily history so past calls still show up
