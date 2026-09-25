@@ -19,6 +19,7 @@ class Contact(models.Model):
     reminder_date = models.DateField(blank=True, null=True)
 
     is_active = models.BooleanField(default=True)
+    last_updated = models.DateTimeField(auto_now=True)
     
     def __str__(self):
         return self.name

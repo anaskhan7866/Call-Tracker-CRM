@@ -10,6 +10,8 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.cache import never_cache
 from .models import Contact
 # REMOVE: from datetime import date
+from django.db.models.functions import TruncDate
+from django.contrib.auth.models import User
 from django.utils import timezone # ADD THIS INSTEAD
 
 @never_cache
@@ -34,6 +36,10 @@ def upload_excel(request):
             if 'cx name' not in df.columns or 'contact' not in df.columns:
                 messages.error(request, "Upload failed: The Excel file MUST contain 'Cx Name' and 'Contact' columns.")
                 return redirect('upload_excel')
+
+            
+            Contact.objects.filter(user=request.user).update(is_active=False)
+
 
             count = 0
             for index, row in df.iterrows():
@@ -203,37 +209,72 @@ def export_excel(request):
 @never_cache
 @login_required
 def dashboard(request):
-    # Filter for dashboard metrics
-    if request.user.is_staff or request.user.is_superuser:
-        base_contacts = Contact.objects.all()
-    else:
-        base_contacts = Contact.objects.filter(user=request.user, is_active=True)
-        
-    total_leads = base_contacts.count()
-    status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
-    
-    labels = []
-    counts = []
-    
-    for metric in status_metrics:
-        labels.append(metric['call_status'])
-        counts.append(metric['total'])
-        
-    # Fetch today's reminders AND overdue reminders
     today = timezone.localdate()
 
-    # FIX: Use base_contacts instead of Contact.objects
-    todays_reminders = base_contacts.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
+    if request.user.is_staff or request.user.is_superuser:
+        # --- ADMIN DASHBOARD ---
+        # 1. Get overarching employee metrics
+        employees = User.objects.filter(is_superuser=False, is_staff=False).annotate(
+            total_leads=Count('contact', filter=Q(contact__is_active=True)),
+            pending=Count('contact', filter=Q(contact__call_status='Pending', contact__is_active=True)),
+            total_called=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__is_active=True)),
+            called_today=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__last_updated__date=today, contact__is_active=True))
+        ).order_by('username')
         
-    context = {
-        'total_leads': total_leads,
-        'labels': labels,
-        'counts': counts,
-        'todays_reminders': todays_reminders,
-        'today': today, 
-    }
-    
-    return render(request, 'dashboard.html', context)
+        # 2. Extract daily call history grouped by User and Date
+        daily_history_raw = Contact.objects.filter(
+            ~Q(call_status='Pending'), 
+            is_active=True,
+            last_updated__isnull=False
+        ).annotate(
+            date=TruncDate('last_updated')
+        ).values('user__id', 'date').annotate(
+            daily_calls=Count('id')
+        ).order_by('-date')
+        
+        # 3. Map history to respective users
+        history_by_user = {}
+        for entry in daily_history_raw:
+            uid = entry['user__id']
+            if uid not in history_by_user:
+                history_by_user[uid] = []
+            history_by_user[uid].append({
+                'date': entry['date'],
+                'calls': entry['daily_calls']
+            })
+            
+        for emp in employees:
+            emp.daily_history = history_by_user.get(emp.id, [])
+            
+        context = {
+            'is_admin': True,
+            'employees': employees,
+        }
+        return render(request, 'dashboard.html', context)
+        
+    else:
+        # --- TELECALLER DASHBOARD ---
+        base_contacts = Contact.objects.filter(user=request.user, is_active=True)
+        total_leads = base_contacts.count()
+        status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
+        
+        labels = []
+        counts = []
+        for metric in status_metrics:
+            labels.append(metric['call_status'])
+            counts.append(metric['total'])
+            
+        todays_reminders = base_contacts.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
+            
+        context = {
+            'is_admin': False,
+            'total_leads': total_leads,
+            'labels': labels,
+            'counts': counts,
+            'todays_reminders': todays_reminders,
+            'today': today, 
+        }
+        return render(request, 'dashboard.html', context)
 
 @never_cache
 def landing_page(request):

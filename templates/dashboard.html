@@ -1,320 +1,381 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="mb-0 fw-bold text-dark">Analytics Dashboard</h3>
-        <p class="text-muted mb-0 small">Live overview of lead conversion metrics</p>
-    </div>
-    <a href="{% url 'contact_list' %}" class="btn btn-primary rounded-pill shadow-sm">
-        <i class="bi bi-people"></i> Manage Leads
-    </a>
-</div>
-
-<!-- KPI Cards -->
-<div class="row mb-4">
-    <div class="col-md-4">
-        <div class="card bg-primary text-white shadow-sm h-100">
-            <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
-                <h6 class="card-title text-uppercase fw-semibold mb-2 opacity-75">Total Leads Processed</h6>
-                <h2 class="display-4 fw-bold mb-0">{{ total_leads }}</h2>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Charts Section -->
-<div class="row g-4">
-    <!-- Donut Chart -->
-    <div class="col-md-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                <h6 class="fw-bold text-dark mb-0">Lead Status Distribution</h6>
-            </div>
-            <div class="card-body d-flex justify-content-center align-items-center" style="position: relative; height:300px;">
-                <canvas id="statusDonutChart"></canvas>
-            </div>
+{% if is_admin %}
+    <!-- ========================================== -->
+    <!-- ADMIN DASHBOARD                            -->
+    <!-- ========================================== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="mb-0 fw-bold text-dark">Admin Dashboard: Team Performance</h3>
+            <p class="text-muted mb-0 small">Live overview of telecaller activities and daily history</p>
         </div>
     </div>
     
-    <!-- Bar Chart -->
-    <div class="col-md-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                <h6 class="fw-bold text-dark mb-0">Conversion Volume</h6>
-            </div>
-            <div class="card-body" style="position: relative; height:300px;">
-                <canvas id="statusBarChart"></canvas>
+    <div class="accordion shadow-sm" id="employeeAccordion">
+        {% for employee in employees %}
+        <div class="accordion-item border-0 border-bottom">
+            <h2 class="accordion-header" id="heading{{ employee.id }}">
+                <button class="accordion-button collapsed bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ employee.id }}">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center w-100 pe-3 gap-2">
+                        <span class="fw-bold text-dark fs-5"><i class="bi bi-person-badge text-primary me-2"></i>{{ employee.username|title }}</span>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border">Total: {{ employee.total_leads }}</span>
+                            <span class="badge bg-danger bg-opacity-10 text-danger border">Pending: {{ employee.pending }}</span>
+                            <span class="badge bg-success bg-opacity-10 text-success border">Total Called: {{ employee.total_called }}</span>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border">Called Today: {{ employee.called_today }}</span>
+                        </div>
+                    </div>
+                </button>
+            </h2>
+            <div id="collapse{{ employee.id }}" class="accordion-collapse collapse" data-bs-parent="#employeeAccordion">
+                <div class="accordion-body bg-light pt-4">
+                    <h6 class="fw-bold mb-3 text-secondary"><i class="bi bi-calendar-range me-2"></i>Daily Call History</h6>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover bg-white border shadow-sm rounded">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3 py-2">Date</th>
+                                    <th class="py-2">Calls Made (Status Updates)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for day in employee.daily_history %}
+                                <tr>
+                                    <td class="ps-3 py-2 fw-medium text-dark">{{ day.date|date:"M d, Y" }}</td>
+                                    <td class="py-2">
+                                        <span class="badge bg-primary rounded-pill px-3">{{ day.calls }} Calls</span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center py-4 text-muted">
+                                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                                        No call history available yet.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
+        {% empty %}
+        <div class="text-center py-5">
+            <p class="text-muted">No telecallers found in the system.</p>
+        </div>
+        {% endfor %}
     </div>
-</div>
 
-<!-- Today's Reminders Section (NOW EDITABLE + OVERDUE HIGHLIGHTS) -->
-<div class="row mt-4 mb-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white border-bottom-0 pt-4 pb-2 d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold text-dark mb-0"><i class="bi bi-bell-fill text-warning me-2"></i>Today's Scheduled Calls</h5>
-                <span class="badge bg-primary rounded-pill">{{ todays_reminders|length }} Reminders</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="bg-light">
-                            <tr>
-                                <th class="ps-4">Cx Name</th>
-                                <th>Contact</th>
-                                <th style="width: 160px;">Status</th>
-                                <th>Notes</th>
-                                <th class="pe-4 text-center" style="width: 140px;">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for lead in todays_reminders %}
-                            <tr id="row-{{ lead.id }}" class="{% if lead.reminder_date < today %}bg-danger bg-opacity-10{% endif %}">
-                                <td class="ps-4">
-                                    <div class="fw-bold text-dark">{{ lead.name }}</div>
-                                    <!-- Visual Badge for Overdue vs Today -->
-                                    {% if lead.reminder_date < today %}
-                                        <span class="badge bg-danger shadow-sm"><i class="bi bi-exclamation-circle"></i> Overdue ({{ lead.reminder_date|date:"M d" }})</span>
-                                    {% else %}
-                                        <span class="badge bg-info shadow-sm text-dark"><i class="bi bi-calendar-event"></i> Today</span>
-                                    {% endif %}
-                                </td>
-                                <td class="fw-medium text-secondary">{{ lead.phone_number }}</td>
-                                
-                                <!-- Editable Status Dropdown -->
-                                <td>
-                                    <select id="dash_status_{{ lead.id }}" class="form-select form-select-sm bg-light border-0 shadow-none">
-                                        <option value="Pending" {% if lead.call_status == 'Pending' %}selected{% endif %}>🔴 Pending</option>
-                                        <option value="Connected" {% if lead.call_status == 'Connected' %}selected{% endif %}>🟢 Connected</option>
-                                        <option value="Not Connected" {% if lead.call_status == 'Not Connected' %}selected{% endif %}>🟡 Not Connected</option>
-                                    </select>
-                                </td>
-                                
-                                <!-- Editable Notes Textarea -->
-                                <td>
-                                    <textarea id="dash_desc_{{ lead.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" rows="2" placeholder="Add notes...">{% if lead.description and lead.description != 'None' %}{{ lead.description }}{% endif %}</textarea>
-                                </td>
-                                
-                                <!-- Action Buttons -->
-                                <td class="pe-4 text-center">
-                                    <div class="d-flex flex-column gap-1">
-                                        <button class="btn btn-sm btn-outline-success fw-semibold mark-done-btn w-100" data-id="{{ lead.id }}">
-                                            <i class="bi bi-check2-all"></i> Done
-                                        </button>
-                                        
-                                        <!-- Quick Reschedule Dropdown -->
-                                        <div class="dropdown w-100">
-                                            <button class="btn btn-sm btn-light text-secondary border dropdown-toggle w-100" type="button" data-bs-toggle="dropdown">
-                                                <i class="bi bi-calendar-plus"></i> Delay
-                                            </button>
-                                            <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size: 0.85rem;">
-                                                <li><a class="dropdown-item reschedule-btn" href="#" data-id="{{ lead.id }}" data-days="1">Tomorrow (+1 Day)</a></li>
-                                                <li><a class="dropdown-item reschedule-btn" href="#" data-id="{{ lead.id }}" data-days="3">In 3 Days</a></li>
-                                                <li><a class="dropdown-item reschedule-btn" href="#" data-id="{{ lead.id }}" data-days="7">Next Week</a></li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">
-                                    <i class="bi bi-calendar2-check fs-1 d-block mb-2 text-success opacity-50"></i>
-                                    <h5 class="fw-semibold text-dark">All caught up!</h5>
-                                    <p class="mb-0">No follow-ups scheduled or overdue.</p>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+{% else %}
+    <!-- ========================================== -->
+    <!-- TELECALLER DASHBOARD                       -->
+    <!-- ========================================== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="mb-0 fw-bold text-dark">Analytics Dashboard</h3>
+            <p class="text-muted mb-0 small">Live overview of lead conversion metrics</p>
+        </div>
+        <a href="{% url 'contact_list' %}" class="btn btn-primary rounded-pill shadow-sm">
+            <i class="bi bi-people"></i> Manage Leads
+        </a>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white shadow-sm h-100">
+                <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
+                    <h6 class="card-title text-uppercase fw-semibold mb-2 opacity-75">Total Leads Processed</h6>
+                    <h2 class="display-4 fw-bold mb-0">{{ total_leads }}</h2>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Chart.js Library -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Charts Section -->
+    <div class="row g-4">
+        <!-- Donut Chart -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                    <h6 class="fw-bold text-dark mb-0">Lead Status Distribution</h6>
+                </div>
+                <div class="card-body d-flex justify-content-center align-items-center" style="position: relative; height:300px;">
+                    <canvas id="statusDonutChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bar Chart -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                    <h6 class="fw-bold text-dark mb-0">Conversion Volume</h6>
+                </div>
+                <div class="card-body" style="position: relative; height:300px;">
+                    <canvas id="statusBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // --- 1. CSRF Token Helper ---
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
+    <!-- Today's Reminders Section -->
+    <div class="row mt-4 mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-2 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-bell-fill text-warning me-2"></i>Today's Scheduled Calls</h5>
+                    <span class="badge bg-primary rounded-pill">{{ todays_reminders|length }} Reminders</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="ps-4">Cx Name</th>
+                                    <th>Contact</th>
+                                    <th style="width: 160px;">Status</th>
+                                    <th>Notes</th>
+                                    <th class="pe-4 text-center" style="width: 140px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for lead in todays_reminders %}
+                                <tr id="row-{{ lead.id }}" class="{% if lead.reminder_date < today %}bg-danger bg-opacity-10{% endif %}">
+                                    <td class="ps-4">
+                                        <div class="fw-bold text-dark">{{ lead.name }}</div>
+                                        {% if lead.reminder_date < today %}
+                                            <span class="badge bg-danger shadow-sm"><i class="bi bi-exclamation-circle"></i> Overdue ({{ lead.reminder_date|date:"M d" }})</span>
+                                        {% else %}
+                                            <span class="badge bg-info shadow-sm text-dark"><i class="bi bi-calendar-event"></i> Today</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="fw-medium text-secondary">{{ lead.phone_number }}</td>
+                                    <td>
+                                        <select id="dash_status_{{ lead.id }}" class="form-select form-select-sm bg-light border-0 shadow-none">
+                                            <option value="Pending" {% if lead.call_status == 'Pending' %}selected{% endif %}>🔴 Pending</option>
+                                            <option value="Connected" {% if lead.call_status == 'Connected' %}selected{% endif %}>🟢 Connected</option>
+                                            <option value="Not Connected" {% if lead.call_status == 'Not Connected' %}selected{% endif %}>🟡 Not Connected</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <textarea id="dash_desc_{{ lead.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" rows="2" placeholder="Add notes...">{% if lead.description and lead.description != 'None' %}{{ lead.description }}{% endif %}</textarea>
+                                    </td>
+                                    <td class="pe-4 text-center">
+                                        <div class="d-flex flex-column gap-1">
+                                            <button class="btn btn-sm btn-outline-success fw-semibold mark-done-btn w-100" data-id="{{ lead.id }}">
+                                                <i class="bi bi-check2-all"></i> Done
+                                            </button>
+                                            
+                                            <div class="dropdown w-100">
+                                                <button class="btn btn-sm btn-light text-secondary border dropdown-toggle w-100" type="button" data-bs-toggle="dropdown">
+                                                    <i class="bi bi-calendar-plus"></i> Delay
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size: 0.85rem;">
+                                                    <li><a class="dropdown-item reschedule-btn" href="#" data-id="{{ lead.id }}" data-days="1">Tomorrow (+1 Day)</a></li>
+                                                    <li><a class="dropdown-item reschedule-btn" href="#" data-id="{{ lead.id }}" data-days="3">In 3 Days</a></li>
+                                                    <li><a class="dropdown-item reschedule-btn" href="#" data-id="{{ lead.id }}" data-days="7">Next Week</a></li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-muted">
+                                        <i class="bi bi-calendar2-check fs-1 d-block mb-2 text-success opacity-50"></i>
+                                        <h5 class="fw-semibold text-dark">All caught up!</h5>
+                                        <p class="mb-0">No follow-ups scheduled or overdue.</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- 1. CSRF Token Helper ---
+            function getCookie(name) {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
                     }
                 }
+                return cookieValue;
             }
-            return cookieValue;
-        }
-        const csrftoken = getCookie('csrftoken');
+            const csrftoken = getCookie('csrftoken');
 
-        // --- 2. Smart "Mark Done" Logic (Saves data AND removes row) ---
-        document.querySelectorAll('.mark-done-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const contactId = this.dataset.id;
-                const statusValue = document.getElementById('dash_status_' + contactId).value;
-                const descValue = document.getElementById('dash_desc_' + contactId).value;
-                
-                this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-                this.disabled = true;
+            // --- 2. Smart "Mark Done" Logic (Saves data AND removes row) ---
+            document.querySelectorAll('.mark-done-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const contactId = this.dataset.id;
+                    const statusValue = document.getElementById('dash_status_' + contactId).value;
+                    const descValue = document.getElementById('dash_desc_' + contactId).value;
+                    
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                    this.disabled = true;
 
-                fetch('{% url "auto_update_contact" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrftoken
-                    },
-                    body: JSON.stringify({
-                        id: contactId,
-                        status: statusValue,
-                        description: descValue,
-                        reminder_date: "" // Clears the reminder to remove from list
+                    fetch('{% url "auto_update_contact" %}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({
+                            id: contactId,
+                            status: statusValue,
+                            description: descValue,
+                            reminder_date: "" // Clears the reminder to remove from list
+                        })
                     })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if(data.success) {
-                        const row = document.getElementById('row-' + contactId);
-                        row.style.transition = "opacity 0.5s";
-                        row.style.opacity = "0";
-                        
-                        const badge = document.querySelector('.badge.bg-primary');
-                        let currentCount = parseInt(badge.innerText);
-                        if(currentCount > 0) {
-                            badge.innerText = (currentCount - 1) + " Reminders";
+                    .then(response => response.json())
+                    .then(data => {
+                        if(data.success) {
+                            const row = document.getElementById('row-' + contactId);
+                            row.style.transition = "opacity 0.5s";
+                            row.style.opacity = "0";
+                            
+                            const badge = document.querySelector('.badge.bg-primary');
+                            let currentCount = parseInt(badge.innerText);
+                            if(currentCount > 0) {
+                                badge.innerText = (currentCount - 1) + " Reminders";
+                            }
+                            
+                            setTimeout(() => row.remove(), 500);
+                        } else {
+                            alert("Error updating record!");
+                            this.innerHTML = '<i class="bi bi-check2-all"></i> Done';
+                            this.disabled = false;
                         }
-                        
-                        setTimeout(() => row.remove(), 500);
-                    } else {
-                        alert("Error updating record!");
-                        this.innerHTML = '<i class="bi bi-check2-all"></i> Done';
-                        this.disabled = false;
-                    }
+                    });
                 });
             });
-        });
 
-        // --- 3. Quick Reschedule Logic ---
-        document.querySelectorAll('.reschedule-btn').forEach(button => {
-            button.addEventListener('click', function(e) {
-                e.preventDefault(); // Prevent page jump
-                
-                const contactId = this.dataset.id;
-                const daysToAdd = parseInt(this.dataset.days);
-                const statusValue = document.getElementById('dash_status_' + contactId).value;
-                const descValue = document.getElementById('dash_desc_' + contactId).value;
-                
-                // Calculate the new date in JavaScript (YYYY-MM-DD)
-                let newDate = new Date();
-                newDate.setDate(newDate.getDate() + daysToAdd);
-                const formattedDate = newDate.toISOString().split('T')[0];
-                
-                // Change the main button to show a spinner
-                const mainDropdownBtn = this.closest('.dropdown').querySelector('.dropdown-toggle');
-                mainDropdownBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-                mainDropdownBtn.disabled = true;
+            // --- 3. Quick Reschedule Logic ---
+            document.querySelectorAll('.reschedule-btn').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault(); 
+                    
+                    const contactId = this.dataset.id;
+                    const daysToAdd = parseInt(this.dataset.days);
+                    const statusValue = document.getElementById('dash_status_' + contactId).value;
+                    const descValue = document.getElementById('dash_desc_' + contactId).value;
+                    
+                    let newDate = new Date();
+                    newDate.setDate(newDate.getDate() + daysToAdd);
+                    const formattedDate = newDate.toISOString().split('T')[0];
+                    
+                    const mainDropdownBtn = this.closest('.dropdown').querySelector('.dropdown-toggle');
+                    mainDropdownBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                    mainDropdownBtn.disabled = true;
 
-                // Save status, notes, and the NEW date to the backend
-                fetch('{% url "auto_update_contact" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrftoken
-                    },
-                    body: JSON.stringify({
-                        id: contactId,
-                        status: statusValue,
-                        description: descValue,
-                        reminder_date: formattedDate // Sets the new future date
+                    fetch('{% url "auto_update_contact" %}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({
+                            id: contactId,
+                            status: statusValue,
+                            description: descValue,
+                            reminder_date: formattedDate 
+                        })
                     })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if(data.success) {
-                        // Fade out the row since it's no longer due today
-                        const row = document.getElementById('row-' + contactId);
-                        row.style.transition = "opacity 0.5s";
-                        row.style.opacity = "0";
-                        
-                        const badge = document.querySelector('.badge.bg-primary');
-                        let currentCount = parseInt(badge.innerText);
-                        if(currentCount > 0) {
-                            badge.innerText = (currentCount - 1) + " Reminders";
+                    .then(response => response.json())
+                    .then(data => {
+                        if(data.success) {
+                            const row = document.getElementById('row-' + contactId);
+                            row.style.transition = "opacity 0.5s";
+                            row.style.opacity = "0";
+                            
+                            const badge = document.querySelector('.badge.bg-primary');
+                            let currentCount = parseInt(badge.innerText);
+                            if(currentCount > 0) {
+                                badge.innerText = (currentCount - 1) + " Reminders";
+                            }
+                            
+                            setTimeout(() => row.remove(), 500);
+                        } else {
+                            alert("Error updating record!");
+                            mainDropdownBtn.innerHTML = '<i class="bi bi-calendar-plus"></i> Delay';
+                            mainDropdownBtn.disabled = false;
                         }
-                        
-                        setTimeout(() => row.remove(), 500);
-                    } else {
-                        alert("Error updating record!");
-                        mainDropdownBtn.innerHTML = '<i class="bi bi-calendar-plus"></i> Delay';
-                        mainDropdownBtn.disabled = false;
-                    }
+                    });
                 });
             });
+
+            // --- 4. Chart.js Logic ---
+            const labels = {{ labels|safe }};
+            const dataCounts = {{ counts|safe }};
+            
+            const colorConfig = {
+                'Connected': { bg: 'rgba(40, 167, 69, 0.8)', border: 'rgba(40, 167, 69, 1)' },
+                'Not Connected': { bg: 'rgba(255, 193, 7, 0.8)', border: 'rgba(211, 158, 0, 1)' },
+                'Pending': { bg: 'rgba(220, 53, 69, 0.8)', border: 'rgba(220, 53, 69, 1)' }
+            };
+
+            const backgroundColors = labels.map(label => colorConfig[label] ? colorConfig[label].bg : 'rgba(200, 200, 200, 0.8)');
+            const borderColors = labels.map(label => colorConfig[label] ? colorConfig[label].border : 'rgba(150, 150, 150, 1)');
+
+            const ctxDonut = document.getElementById('statusDonutChart').getContext('2d');
+            new Chart(ctxDonut, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: dataCounts,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            const ctxBar = document.getElementById('statusBarChart').getContext('2d');
+            new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Number of Leads',
+                        data: dataCounts,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
         });
-
-        // --- 4. Chart.js Logic ---
-        const labels = {{ labels|safe }};
-        const dataCounts = {{ counts|safe }};
-        
-        const colorConfig = {
-            'Connected': { bg: 'rgba(40, 167, 69, 0.8)', border: 'rgba(40, 167, 69, 1)' },
-            'Not Connected': { bg: 'rgba(255, 193, 7, 0.8)', border: 'rgba(211, 158, 0, 1)' },
-            'Pending': { bg: 'rgba(220, 53, 69, 0.8)', border: 'rgba(220, 53, 69, 1)' }
-        };
-
-        const backgroundColors = labels.map(label => colorConfig[label] ? colorConfig[label].bg : 'rgba(200, 200, 200, 0.8)');
-        const borderColors = labels.map(label => colorConfig[label] ? colorConfig[label].border : 'rgba(150, 150, 150, 1)');
-
-        const ctxDonut = document.getElementById('statusDonutChart').getContext('2d');
-        new Chart(ctxDonut, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: dataCounts,
-                    backgroundColor: backgroundColors,
-                    borderColor: borderColors,
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } }
-            }
-        });
-
-        const ctxBar = document.getElementById('statusBarChart').getContext('2d');
-        new Chart(ctxBar, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Number of Leads',
-                    data: dataCounts,
-                    backgroundColor: backgroundColors,
-                    borderColor: borderColors,
-                    borderWidth: 1,
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-            }
-        });
-    });
-</script>
+    </script>
+{% endif %}
 {% endblock %}
