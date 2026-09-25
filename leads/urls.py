@@ -13,4 +13,5 @@ urlpatterns = [
     path('contacts/auto-update/', views.auto_update_contact, name='auto_update_contact'), 
     path('upload_excel/', views.upload_excel, name='upload_excel'),
     path('contacts/export/', views.export_excel, name='export_excel'),
+    path('api/daily-calls/', views.get_daily_call_details, name='get_daily_call_details'),
 ]

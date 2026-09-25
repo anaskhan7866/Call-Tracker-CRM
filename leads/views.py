@@ -206,6 +206,12 @@ def export_excel(request):
     df.to_excel(response, index=False)
     return response
 
+from django.contrib.auth.models import User
+from django.db.models import Count, Q
+from django.db.models.functions import TruncDate
+from django.utils import timezone
+from .models import Contact
+
 @never_cache
 @login_required
 def dashboard(request):
@@ -213,7 +219,17 @@ def dashboard(request):
 
     if request.user.is_staff or request.user.is_superuser:
         # --- ADMIN DASHBOARD ---
-        # 1. Get overarching employee metrics
+        
+        # 1. Handle Global Search
+        search_query = request.GET.get('q', '').strip()
+        search_results = None
+        
+        if search_query:
+            search_results = Contact.objects.filter(
+                Q(name__icontains=search_query) | Q(phone_number__icontains=search_query)
+            ).select_related('user').order_by('-last_updated')[:50] # Shows top 50 matches
+
+        # 2. Get overarching employee metrics
         employees = User.objects.filter(is_superuser=False, is_staff=False).annotate(
             total_leads=Count('contact', filter=Q(contact__is_active=True)),
             pending=Count('contact', filter=Q(contact__call_status='Pending', contact__is_active=True)),
@@ -221,7 +237,7 @@ def dashboard(request):
             called_today=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__last_updated__date=today, contact__is_active=True))
         ).order_by('username')
         
-        # 2. Extract daily call history grouped by User and Date
+        # 3. Extract daily call history grouped by User and Date
         daily_history_raw = Contact.objects.filter(
             ~Q(call_status='Pending'), 
             is_active=True,
@@ -232,7 +248,7 @@ def dashboard(request):
             daily_calls=Count('id')
         ).order_by('-date')
         
-        # 3. Map history to respective users
+        # 4. Map history to respective users
         history_by_user = {}
         for entry in daily_history_raw:
             uid = entry['user__id']
@@ -249,11 +265,13 @@ def dashboard(request):
         context = {
             'is_admin': True,
             'employees': employees,
+            'search_query': search_query,
+            'search_results': search_results,
         }
         return render(request, 'dashboard.html', context)
         
     else:
-        # --- TELECALLER DASHBOARD ---
+        # --- TELECALLER DASHBOARD (Keep this exactly as it is) ---
         base_contacts = Contact.objects.filter(user=request.user, is_active=True)
         total_leads = base_contacts.count()
         status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
@@ -279,3 +297,40 @@ def dashboard(request):
 @never_cache
 def landing_page(request):
     return render(request, 'index.html')
+
+
+# Add this at the bottom of your leads/views.py
+@never_cache
+@login_required
+def get_daily_call_details(request):
+    # Security check: Only admins can access this data
+    if not (request.user.is_staff or request.user.is_superuser):
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    
+    user_id = request.GET.get('user_id')
+    date_str = request.GET.get('date') # Format: YYYY-MM-DD
+    
+    try:
+        # Filter contacts updated on this specific date by this specific user
+        calls = Contact.objects.filter(
+            user_id=user_id,
+            last_updated__date=date_str,
+            is_active=True
+        ).exclude(call_status='Pending').values(
+            'name', 'phone_number', 'call_status', 'description', 'last_updated'
+        ).order_by('-last_updated')
+        
+        # Format the data to send to the frontend
+        call_list = []
+        for call in calls:
+            call_list.append({
+                'name': call['name'],
+                'phone': call['phone_number'],
+                'status': call['call_status'],
+                'description': call['description'] or '-',
+                'time': call['last_updated'].strftime('%I:%M %p') # e.g., "02:30 PM"
+            })
+            
+        return JsonResponse({'success': True, 'calls': call_list})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

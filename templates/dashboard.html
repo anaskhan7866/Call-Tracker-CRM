@@ -5,13 +5,83 @@
     <!-- ========================================== -->
     <!-- ADMIN DASHBOARD                            -->
     <!-- ========================================== -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    
+    <!-- HEADER WITH SEARCH BAR -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
             <h3 class="mb-0 fw-bold text-dark">Admin Dashboard: Team Performance</h3>
             <p class="text-muted mb-0 small">Live overview of telecaller activities and daily history</p>
         </div>
+        
+        <form method="GET" action="{% url 'dashboard' %}" class="d-flex gap-2 align-items-center">
+            <div class="position-relative">
+                <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                <input type="text" name="q" class="form-control ps-5 rounded-pill shadow-sm" style="width: 280px;" value="{{ search_query }}" placeholder="Search name or phone...">
+            </div>
+            <button type="submit" class="btn btn-primary rounded-pill shadow-sm px-4">Search</button>
+            {% if search_query %}
+                <a href="{% url 'dashboard' %}" class="btn btn-light rounded-pill shadow-sm px-3" title="Clear Search">Clear</a>
+            {% endif %}
+        </form>
     </div>
-    
+
+    <!-- SEARCH RESULTS (Only shows when searching) -->
+    {% if search_query %}
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary text-white py-3">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-search me-2"></i>Search Results for "{{ search_query }}"</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light sticky-top shadow-sm">
+                        <tr>
+                            <th class="ps-4 py-3">Cx Name</th>
+                            <th class="py-3">Phone Number</th>
+                            <th class="py-3">Assigned To</th>
+                            <th class="py-3">Status</th>
+                            <th class="py-3">Last Updated</th>
+                            <th class="pe-4 py-3">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for result in search_results %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-dark">{{ result.name }}</td>
+                            <td>{{ result.phone_number }}</td>
+                            <td>
+                                <span class="badge bg-info bg-opacity-25 text-dark border border-info shadow-sm">
+                                    <i class="bi bi-person"></i> {{ result.user.username|title|default:"Unassigned" }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if result.call_status == 'Connected' %}
+                                    <span class="badge bg-success bg-opacity-75">Connected</span>
+                                {% elif result.call_status == 'Not Connected' %}
+                                    <span class="badge bg-warning text-dark bg-opacity-75">Not Connected</span>
+                                {% else %}
+                                    <span class="badge bg-secondary bg-opacity-75">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small">{{ result.last_updated|date:"M d, Y" }} <br> {{ result.last_updated|time:"h:i A" }}</td>
+                            <td class="pe-4 text-muted small text-wrap" style="max-width: 250px;">{{ result.description|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-emoji-frown fs-2 d-block mb-2"></i>
+                                No contacts found matching "{{ search_query }}".
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ACCORDION (Team Performance) -->
     <div class="accordion shadow-sm" id="employeeAccordion">
         {% for employee in employees %}
         <div class="accordion-item border-0 border-bottom">
@@ -43,7 +113,14 @@
                             <tbody>
                                 {% for day in employee.daily_history %}
                                 <tr>
-                                    <td class="ps-3 py-2 fw-medium text-dark">{{ day.date|date:"M d, Y" }}</td>
+                                    <td class="ps-3 py-2 fw-medium">
+                                        <a href="#" class="text-decoration-none view-history-btn text-primary d-flex align-items-center gap-2" 
+                                           data-uid="{{ employee.id }}" 
+                                           data-date="{{ day.date|date:'Y-m-d' }}"
+                                           data-empname="{{ employee.username }}">
+                                           <i class="bi bi-calendar2-day"></i> {{ day.date|date:"M d, Y" }}
+                                        </a>
+                                    </td>
                                     <td class="py-2">
                                         <span class="badge bg-primary rounded-pill px-3">{{ day.calls }} Calls</span>
                                     </td>
@@ -68,6 +145,111 @@
         </div>
         {% endfor %}
     </div>
+
+    <!-- CALL DETAILS MODAL -->
+    <div class="modal fade" id="callDetailsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light border-bottom">
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-1">Call Report: <span id="modalEmpName" class="text-primary text-capitalize"></span></h5>
+                        <span class="badge bg-secondary" id="modalDateBadge"></span>
+                    </div>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Loading Spinner -->
+                    <div id="modalLoading" class="text-center py-5 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-2 small">Fetching records...</p>
+                    </div>
+                    
+                    <!-- Data Table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="modalTable">
+                            <thead class="bg-white sticky-top shadow-sm">
+                                <tr>
+                                    <th class="ps-4 py-3" style="font-size: 0.85rem;">TIME</th>
+                                    <th class="py-3" style="font-size: 0.85rem;">CUSTOMER</th>
+                                    <th class="py-3" style="font-size: 0.85rem;">PHONE</th>
+                                    <th class="py-3" style="font-size: 0.85rem;">STATUS</th>
+                                    <th class="pe-4 py-3" style="font-size: 0.85rem;">NOTES</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modalCallTableBody">
+                                <!-- Javascript will insert rows here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin JavaScript for Modal -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modalElement = document.getElementById('callDetailsModal');
+            if (!modalElement) return;
+
+            const callModal = new bootstrap.Modal(modalElement);
+            
+            document.querySelectorAll('.view-history-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    const uid = this.dataset.uid;
+                    const date = this.dataset.date;
+                    const empName = this.dataset.empname;
+                    
+                    document.getElementById('modalEmpName').innerText = empName;
+                    document.getElementById('modalDateBadge').innerHTML = '<i class="bi bi-calendar-event me-1"></i>' + this.innerText.trim();
+                    
+                    const tbody = document.getElementById('modalCallTableBody');
+                    const loader = document.getElementById('modalLoading');
+                    const table = document.getElementById('modalTable');
+                    
+                    tbody.innerHTML = '';
+                    table.classList.add('d-none');
+                    loader.classList.remove('d-none');
+                    callModal.show();
+                    
+                    fetch(`/api/daily-calls/?user_id=${uid}&date=${date}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            loader.classList.add('d-none');
+                            table.classList.remove('d-none');
+                            
+                            if (data.success && data.calls.length > 0) {
+                                let html = '';
+                                data.calls.forEach(call => {
+                                    let badgeClass = call.status === 'Connected' ? 'bg-success' : 'bg-warning text-dark';
+                                    html += `
+                                        <tr>
+                                            <td class="ps-4 text-muted small fw-medium">${call.time}</td>
+                                            <td class="fw-bold text-dark">${call.name}</td>
+                                            <td class="text-muted small">${call.phone}</td>
+                                            <td><span class="badge ${badgeClass} bg-opacity-75">${call.status}</span></td>
+                                            <td class="pe-4 text-muted small text-wrap" style="max-width: 200px;">${call.description}</td>
+                                        </tr>
+                                    `;
+                                });
+                                tbody.innerHTML = html;
+                            } else {
+                                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No records found for this date.</td></tr>`;
+                            }
+                        })
+                        .catch(err => {
+                            loader.classList.add('d-none');
+                            table.classList.remove('d-none');
+                            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Error pulling records from the server.</td></tr>`;
+                        });
+                });
+            });
+        });
+    </script>
 
 {% else %}
     <!-- ========================================== -->
@@ -203,9 +385,9 @@
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <!-- Telecaller JavaScript -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // --- 1. CSRF Token Helper ---
             function getCookie(name) {
                 let cookieValue = null;
                 if (document.cookie && document.cookie !== '') {
@@ -222,7 +404,6 @@
             }
             const csrftoken = getCookie('csrftoken');
 
-            // --- 2. Smart "Mark Done" Logic (Saves data AND removes row) ---
             document.querySelectorAll('.mark-done-btn').forEach(button => {
                 button.addEventListener('click', function() {
                     const contactId = this.dataset.id;
@@ -242,7 +423,7 @@
                             id: contactId,
                             status: statusValue,
                             description: descValue,
-                            reminder_date: "" // Clears the reminder to remove from list
+                            reminder_date: "" 
                         })
                     })
                     .then(response => response.json())
@@ -268,7 +449,6 @@
                 });
             });
 
-            // --- 3. Quick Reschedule Logic ---
             document.querySelectorAll('.reschedule-btn').forEach(button => {
                 button.addEventListener('click', function(e) {
                     e.preventDefault(); 
@@ -322,7 +502,6 @@
                 });
             });
 
-            // --- 4. Chart.js Logic ---
             const labels = {{ labels|safe }};
             const dataCounts = {{ counts|safe }};
             
