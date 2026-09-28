@@ -146,3 +146,31 @@ class ContactPageJumpTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.request['PATH_INFO'], reverse('dashboard'))
 		self.assertEqual(response.redirect_chain[-1], (reverse('dashboard'), 302))
+
+
+class TelecallerDashboardKpiTests(TestCase):
+	def setUp(self):
+		self.user = User.objects.create_user(username='dashboard-caller', password='test-password')
+		self.client.force_login(self.user)
+		Contact.objects.create(user=self.user, name='Pending Lead', phone_number='4440000001')
+		Contact.objects.create(
+			user=self.user,
+			name='Connected Lead',
+			phone_number='4440000002',
+			call_status='Connected',
+		)
+		Contact.objects.create(
+			user=self.user,
+			name='Inactive Pending Lead',
+			phone_number='4440000003',
+			is_active=False,
+		)
+
+	def test_pending_kpi_counts_active_user_leads(self):
+		response = self.client.get(reverse('dashboard'))
+
+		self.assertEqual(response.context['total_leads'], 2)
+		self.assertEqual(response.context['pending_leads'], 1)
+		self.assertEqual(response.context['connected_leads'], 1)
+		self.assertEqual(response.context['not_connected_leads'], 0)
+		self.assertContains(response, 'Pending')

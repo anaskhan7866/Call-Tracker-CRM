@@ -330,6 +330,7 @@ def dashboard(request):
         base_contacts = Contact.objects.filter(user=request.user, is_active=True)
         total_leads = base_contacts.count()
         status_counts = base_contacts.aggregate(
+            pending=Count('id', filter=Q(call_status='Pending')),
             connected=Count('id', filter=Q(call_status='Connected')),
             not_connected=Count('id', filter=Q(call_status='Not Connected')),
         )
@@ -339,6 +340,7 @@ def dashboard(request):
         context = {
             'is_admin': False,
             'total_leads': total_leads,
+            'pending_leads': status_counts['pending'],
             'connected_leads': status_counts['connected'],
             'not_connected_leads': status_counts['not_connected'],
             'todays_reminders': todays_reminders,
