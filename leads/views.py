@@ -19,6 +19,24 @@ from django.contrib.auth.models import User
 from django.utils import timezone 
 
 
+def _india_phone_tel_uri(phone_number):
+    phone_text = str(phone_number).strip()
+    if phone_text.endswith('.0') and phone_text[:-2].isdigit():
+        phone_text = phone_text[:-2]
+
+    digits = re.sub(r'\D', '', phone_text)
+    if digits.startswith('0091'):
+        digits = digits[2:]
+    if len(digits) == 10:
+        digits = f'91{digits}'
+    elif len(digits) == 11 and digits.startswith('0'):
+        digits = f'91{digits[1:]}'
+    elif len(digits) != 12 or not digits.startswith('91'):
+        return None
+
+    return f'tel:+{digits}'
+
+
 @require_POST
 def logout_view(request):
     next_url = request.POST.get('next', '')
@@ -161,6 +179,8 @@ def contact_list(request):
 
     paginator = Paginator(contacts, 10)
     page_obj = paginator.get_page(page_number)
+    for contact in page_obj:
+        contact.call_uri = _india_phone_tel_uri(contact.phone_number)
 
     return render(request, 'contact_list.html', {'page_obj': page_obj, 'query': raw_query})
 

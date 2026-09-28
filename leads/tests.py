@@ -174,3 +174,26 @@ class TelecallerDashboardKpiTests(TestCase):
 		self.assertEqual(response.context['connected_leads'], 1)
 		self.assertEqual(response.context['not_connected_leads'], 0)
 		self.assertContains(response, 'Pending')
+
+
+class ContactCallLinkTests(TestCase):
+	def setUp(self):
+		self.user = User.objects.create_user(username='caller-with-call', password='test-password')
+		self.client.force_login(self.user)
+
+	def test_call_link_adds_indian_country_code_and_preserves_existing_code(self):
+		Contact.objects.create(user=self.user, name='Local Number', phone_number='9876543210')
+		Contact.objects.create(user=self.user, name='Country Coded', phone_number='+919876543211')
+
+		response = self.client.get(reverse('contact_list'), {'page': '1'})
+
+		self.assertContains(response, 'href="tel:+919876543210"')
+		self.assertContains(response, 'href="tel:+919876543211"')
+
+	def test_invalid_phone_does_not_get_a_dial_link(self):
+		Contact.objects.create(user=self.user, name='Invalid Number', phone_number='12345')
+
+		response = self.client.get(reverse('contact_list'), {'page': '1'})
+
+		self.assertNotContains(response, 'href="tel:+9112345"')
+		self.assertContains(response, 'This contact has an invalid phone number')
