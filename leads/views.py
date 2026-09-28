@@ -1,17 +1,54 @@
 import pandas as pd
 import re
 import json
+from urllib.parse import urlencode, urlsplit
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from .models import Contact
 from django.db.models.functions import TruncDate
 from django.contrib.auth.models import User
 from django.utils import timezone 
+
+
+@require_POST
+def logout_view(request):
+    next_url = request.POST.get('next', '')
+    parsed_next_url = urlsplit(next_url)
+    return_to_contacts = (
+        url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+        and parsed_next_url.path == reverse('contact_list')
+    )
+
+    if not return_to_contacts:
+        last_page = request.session.get('last_page')
+        if last_page:
+            contact_params = {'page': last_page}
+            last_query = request.session.get('last_query', '')
+            if last_query:
+                contact_params['q'] = last_query
+            next_url = f"{reverse('contact_list')}?{urlencode(contact_params)}"
+            return_to_contacts = True
+
+    logout(request)
+
+    if return_to_contacts:
+        login_url = reverse('login')
+        return redirect(f"{login_url}?{urlencode({'next': next_url})}")
+
+    return redirect('landing_page')
 
 @never_cache
 @login_required
@@ -29,30 +66,38 @@ def upload_excel(request):
         
         try:
             df = pd.read_excel(excel_file).fillna('')
-            
             df.columns = [str(col).strip().lower() for col in df.columns]
             
             if 'cx name' not in df.columns or 'contact' not in df.columns:
                 messages.error(request, "Upload failed: The Excel file MUST contain 'Cx Name' and 'Contact' columns.")
                 return redirect('upload_excel')
 
-            
-            Contact.objects.filter(user=request.user).update(is_active=False)
+            added_count = 0
+            skipped_count = 0
 
-
-            count = 0
             for index, row in df.iterrows():
                 clean_name = " ".join(str(row.get('cx name', '')).split())
                 clean_phone = " ".join(str(row.get('contact', '')).split())
                 
-                Contact.objects.create(
+                if not clean_phone:
+                    continue
+
+                # Phone numbers are unique within an account, not across accounts.
+                contact_obj, created = Contact.objects.get_or_create(
                     user=request.user,
-                    name=clean_name,
-                    phone_number=clean_phone
+                    phone_number=clean_phone,
+                    defaults={
+                        'name': clean_name,
+                        'call_status': 'Pending'
+                    }
                 )
-                count += 1
+                
+                if created:
+                    added_count += 1
+                else:
+                    skipped_count += 1 # Already existed, left safe and untouched
             
-            messages.success(request, f"Successfully uploaded {count} contacts!")
+            messages.success(request, f"Successfully added {added_count} new contacts! ({skipped_count} duplicates skipped, previous data retained).")
             return redirect('contact_list')
             
         except Exception as e:
@@ -64,6 +109,9 @@ def upload_excel(request):
 @never_cache
 @login_required
 def contact_list(request):
+    if request.user.is_staff or request.user.is_superuser:
+        return redirect('dashboard')
+
     # 1. If user clicks "Clear", wipe the search query and restore the pre-search page
     if 'clear' in request.GET:
         request.session['last_query'] = ''
@@ -281,21 +329,18 @@ def dashboard(request):
         # --- TELECALLER DASHBOARD ---
         base_contacts = Contact.objects.filter(user=request.user, is_active=True)
         total_leads = base_contacts.count()
-        status_metrics = base_contacts.values('call_status').annotate(total=Count('call_status'))
-        
-        labels = []
-        counts = []
-        for metric in status_metrics:
-            labels.append(metric['call_status'])
-            counts.append(metric['total'])
+        status_counts = base_contacts.aggregate(
+            connected=Count('id', filter=Q(call_status='Connected')),
+            not_connected=Count('id', filter=Q(call_status='Not Connected')),
+        )
             
         todays_reminders = base_contacts.filter(reminder_date__lte=today).order_by('reminder_date', 'name')
             
         context = {
             'is_admin': False,
             'total_leads': total_leads,
-            'labels': labels,
-            'counts': counts,
+            'connected_leads': status_counts['connected'],
+            'not_connected_leads': status_counts['not_connected'],
             'todays_reminders': todays_reminders,
             'today': today, 
         }

@@ -136,33 +136,42 @@
     
     <!-- Pagination -->
     <div class="card-footer bg-white border-top py-3">
-        <nav>
-            <ul class="pagination justify-content-center mb-0">
-                {% if page_obj.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link shadow-sm text-dark border-0 rounded ms-1" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}">
-                            <i class="bi bi-chevron-left"></i> Prev
-                        </a>
-                    </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link border-0 rounded ms-1 text-muted"><i class="bi bi-chevron-left"></i> Prev</span></li>
-                {% endif %}
+        <div class="d-flex flex-column flex-md-row justify-content-center align-items-center gap-3">
+            <nav aria-label="Contact pages">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link shadow-sm text-dark border-0 rounded ms-1" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}">
+                                <i class="bi bi-chevron-left"></i> Prev
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link border-0 rounded ms-1 text-muted"><i class="bi bi-chevron-left"></i> Prev</span></li>
+                    {% endif %}
 
-                <li class="page-item active" aria-current="page">
-                    <span class="page-link bg-primary border-0 rounded mx-2 shadow-sm px-3">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                </li>
-
-                {% if page_obj.has_next %}
-                    <li class="page-item">
-                        <a class="page-link shadow-sm text-dark border-0 rounded me-1" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}">
-                            Next <i class="bi bi-chevron-right"></i>
-                        </a>
+                    <li class="page-item active" aria-current="page">
+                        <span class="page-link bg-primary border-0 rounded mx-2 shadow-sm px-3">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
                     </li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link border-0 rounded me-1 text-muted">Next <i class="bi bi-chevron-right"></i></span></li>
-                {% endif %}
-            </ul>
-        </nav>
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link shadow-sm text-dark border-0 rounded me-1" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}">
+                                Next <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link border-0 rounded me-1 text-muted">Next <i class="bi bi-chevron-right"></i></span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+
+            <form method="GET" action="{% url 'contact_list' %}" class="d-flex align-items-center gap-2">
+                {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                <label for="page-jump" class="small text-muted mb-0">Go to page</label>
+                <input id="page-jump" class="form-control form-control-sm" type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" value="{{ page_obj.number }}" required style="width: 5rem;">
+                <button type="submit" class="btn btn-sm btn-primary" aria-label="Go to selected page">Go</button>
+            </form>
+        </div>
     </div>
 </div>
 
