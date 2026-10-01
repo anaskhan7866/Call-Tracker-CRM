@@ -17,6 +17,7 @@ from .models import Contact
 from django.db.models.functions import TruncDate
 from django.contrib.auth.models import User
 from django.utils import timezone 
+from django.db import transaction
 
 
 def _india_phone_tel_uri(phone_number):
@@ -92,32 +93,45 @@ def upload_excel(request):
                 messages.error(request, "Upload failed: The Excel file MUST contain 'Cx Name' and 'Contact' columns.")
                 return redirect('upload_excel')
 
-            added_count = 0
-            skipped_count = 0
+            # 1. OPTIMIZATION: Fetch existing phone numbers for this user into a fast-lookup set (1 Query)
+            existing_phones = set(
+                Contact.objects.filter(user=request.user).values_list('phone_number', flat=True)
+            )
+            
+            new_contacts = []
+            phones_in_current_upload = set() 
+            total_rows = 0
 
+            # 2. Iterate through rows in memory WITHOUT hitting the database
             for index, row in df.iterrows():
                 clean_name = " ".join(str(row.get('cx name', '')).split())
                 clean_phone = " ".join(str(row.get('contact', '')).split())
                 
                 if not clean_phone:
                     continue
+                    
+                total_rows += 1
 
-                # Phone numbers are unique within an account, not across accounts.
-                contact_obj, created = Contact.objects.get_or_create(
-                    user=request.user,
-                    phone_number=clean_phone,
-                    defaults={
-                        'name': clean_name,
-                        'call_status': 'Pending'
-                    }
-                )
-                
-                if created:
-                    added_count += 1
-                else:
-                    skipped_count += 1 # Already existed, left safe and untouched
+                # If phone is completely new (not in DB, and not already seen in this file)
+                if clean_phone not in existing_phones and clean_phone not in phones_in_current_upload:
+                    new_contacts.append(
+                        Contact(
+                            user=request.user,
+                            name=clean_name,
+                            phone_number=clean_phone,
+                            call_status='Pending'
+                        )
+                    )
+                    phones_in_current_upload.add(clean_phone)
             
-            messages.success(request, f"Successfully added {added_count} new contacts! ({skipped_count} duplicates skipped, previous data retained).")
+            # 3. Insert all new records in a single database transaction (1 Query)
+            if new_contacts:
+                Contact.objects.bulk_create(new_contacts, batch_size=1000)
+
+            added_count = len(new_contacts)
+            skipped_count = total_rows - added_count
+            
+            messages.success(request, f"Successfully added {added_count} new contacts! ({skipped_count} duplicates skipped).")
             return redirect('contact_list')
             
         except Exception as e:
@@ -125,6 +139,7 @@ def upload_excel(request):
             return redirect('upload_excel')
         
     return render(request, 'upload.html')
+
 
 @never_cache
 @login_required
