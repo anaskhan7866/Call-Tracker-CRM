@@ -12,8 +12,8 @@
         <p class="text-muted mb-4">Select your portal to continue</p>
         
         <div class="d-grid gap-3">
-            <!-- Ensure '/dashboard/' matches the actual URL path in your leads/urls.py -->
-            <a href="/dashboard/" class="btn btn-primary btn-lg">Telecaller / Data Entry</a>
+            <!-- If there is a saved state, route through login to preserve it -->
+            <a href="{% if request.GET.next %}/accounts/login/?next={{ request.GET.next|urlencode }}{% else %}/dashboard/{% endif %}" class="btn btn-primary btn-lg">Telecaller / Data Entry</a>
             <a href="/admin/" class="btn btn-dark btn-lg">Admin / Data Manager</a>
         </div>
     </div>

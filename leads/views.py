@@ -60,11 +60,13 @@ def logout_view(request):
             next_url = f"{reverse('contact_list')}?{urlencode(contact_params)}"
             return_to_contacts = True
 
+    # Log the user out (this flushes the session)
     logout(request)
 
-    if return_to_contacts:
-        login_url = reverse('login')
-        return redirect(f"{login_url}?{urlencode({'next': next_url})}")
+    # Redirect to the main landing page, but pass the 'next' parameter in the URL
+    landing_url = reverse('landing_page')
+    if return_to_contacts and next_url:
+        return redirect(f"{landing_url}?{urlencode({'next': next_url})}")
 
     return redirect('landing_page')
 
