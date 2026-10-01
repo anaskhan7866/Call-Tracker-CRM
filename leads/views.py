@@ -1,9 +1,12 @@
+import logging
 import pandas as pd
 import re
 import json
+from datetime import date
 from urllib.parse import urlencode, urlsplit
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
+from django.core.exceptions import ValidationError
 from django.db.models import Q, Count
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
@@ -18,6 +21,8 @@ from django.db.models.functions import TruncDate
 from django.contrib.auth.models import User
 from django.utils import timezone 
 from django.db import transaction
+
+logger = logging.getLogger(__name__)
 
 
 def _india_phone_tel_uri(phone_number):
@@ -237,33 +242,54 @@ def update_contacts(request):
 @never_cache
 @login_required
 def auto_update_contact(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            contact_id = data.get('id')
-            
-            # Security: Ensure they can only update their own leads via AJAX
-            if request.user.is_staff or request.user.is_superuser:
-                contact = Contact.objects.get(id=contact_id)
-            else:
-                contact = Contact.objects.get(id=contact_id, user=request.user, is_active=True)
-            
-            if 'status' in data:
-                contact.call_status = data['status']
-            
-            if 'description' in data:
-                contact.description = data['description']
-                
-            # Save the reminder date
-            if 'reminder_date' in data:
-                date_val = data['reminder_date']
-                contact.reminder_date = date_val if date_val else None
-                
-            contact.save()
-            return JsonResponse({'success': True})
-        except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
-    return JsonResponse({'success': False, 'error': 'Invalid request'})
+    if request.method != 'POST':
+        return JsonResponse(
+            {'success': False, 'error': 'Invalid request method.'},
+            status=405,
+        )
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON request.'}, status=400)
+
+    if not isinstance(data, dict) or not data.get('id'):
+        return JsonResponse({'success': False, 'error': 'A contact ID is required.'}, status=400)
+
+    try:
+        contact_id = int(data['id'])
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid contact ID.'}, status=400)
+
+    try:
+        # Keep contact access scoped to the signed-in caller.
+        if request.user.is_staff or request.user.is_superuser:
+            contact = Contact.objects.get(id=contact_id)
+        else:
+            contact = Contact.objects.get(id=contact_id, user=request.user, is_active=True)
+
+        if 'status' in data:
+            contact.call_status = data['status']
+
+        if 'description' in data:
+            contact.description = data['description']
+
+        if 'reminder_date' in data:
+            reminder_date = data['reminder_date']
+            contact.reminder_date = reminder_date if reminder_date else None
+
+        contact.save()
+        return JsonResponse({'success': True})
+    except Contact.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Contact not found.'}, status=404)
+    except ValidationError:
+        return JsonResponse({'success': False, 'error': 'Invalid contact data.'}, status=400)
+    except Exception:
+        logger.exception('Unexpected error updating contact via AJAX')
+        return JsonResponse(
+            {'success': False, 'error': 'Unable to update contact.'},
+            status=500,
+        )
 
 @never_cache
 @login_required
@@ -397,12 +423,18 @@ def get_daily_call_details(request):
     
     user_id = request.GET.get('user_id')
     date_str = request.GET.get('date') 
+
+    try:
+        user_id = int(user_id)
+        call_date = date.fromisoformat(date_str)
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid user or date.'}, status=400)
     
     try:
         # FIX: Removed .values() so Django formats the SQLite datetime correctly
         calls = Contact.objects.filter(
             user_id=user_id,
-            last_updated__date=date_str
+            last_updated__date=call_date
         ).exclude(call_status='Pending').order_by('-last_updated')
         
         call_list = []
@@ -419,5 +451,9 @@ def get_daily_call_details(request):
             })
             
         return JsonResponse({'success': True, 'calls': call_list})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception('Unexpected error loading daily call details via AJAX')
+        return JsonResponse(
+            {'success': False, 'error': 'Unable to load call details.'},
+            status=500,
+        )

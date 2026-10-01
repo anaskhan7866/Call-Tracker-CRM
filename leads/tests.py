@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from io import BytesIO
+from unittest.mock import patch
 import pandas as pd
 from leads.models import Contact
 
@@ -197,3 +198,61 @@ class ContactCallLinkTests(TestCase):
 
 		self.assertNotContains(response, 'href="tel:+9112345"')
 		self.assertContains(response, 'This contact has an invalid phone number')
+
+
+class AJAXErrorHandlingTests(TestCase):
+	def setUp(self):
+		self.user = User.objects.create_user(username='ajax-caller', password='test-password')
+		self.client.force_login(self.user)
+
+	def test_auto_update_does_not_return_unexpected_exception_details(self):
+		contact = Contact.objects.create(
+			user=self.user,
+			name='AJAX Contact',
+			phone_number='5551234567',
+		)
+
+		with patch.object(Contact, 'save', side_effect=RuntimeError('private database detail')):
+			response = self.client.post(
+				reverse('auto_update_contact'),
+				data={'id': contact.id, 'status': 'Connected'},
+				content_type='application/json',
+			)
+
+		self.assertEqual(response.status_code, 500)
+		self.assertEqual(response.json()['error'], 'Unable to update contact.')
+		self.assertNotIn('private database detail', response.content.decode())
+
+	def test_auto_update_rejects_a_non_numeric_contact_id(self):
+		response = self.client.post(
+			reverse('auto_update_contact'),
+			data={'id': 'not-a-number'},
+			content_type='application/json',
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(response.json()['error'], 'Invalid contact ID.')
+
+	def test_daily_call_details_does_not_return_unexpected_exception_details(self):
+		admin = User.objects.create_user(
+			username='ajax-admin',
+			password='test-password',
+			is_staff=True,
+		)
+		self.client.force_login(admin)
+		contact = Contact.objects.create(
+			user=self.user,
+			name='Called Contact',
+			phone_number='5551234567',
+			call_status='Connected',
+		)
+
+		with patch('leads.views.timezone.localtime', side_effect=RuntimeError('private time detail')):
+			response = self.client.get(reverse('get_daily_call_details'), {
+				'user_id': self.user.id,
+				'date': contact.last_updated.date().isoformat(),
+			})
+
+		self.assertEqual(response.status_code, 500)
+		self.assertEqual(response.json()['error'], 'Unable to load call details.')
+		self.assertNotIn('private time detail', response.content.decode())
