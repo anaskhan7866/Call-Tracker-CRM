@@ -19,6 +19,16 @@
 
                 <form method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
+
+                    <div class="text-start mb-3">
+                        <label for="user_id" class="form-label fw-medium text-dark small">Assign contacts to</label>
+                        <select class="form-select" id="user_id" name="user_id" required>
+                            <option value="" selected disabled>Select a telecaller</option>
+                            {% for employee in employees %}
+                            <option value="{{ employee.id }}">{{ employee.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     
                     <!-- Styled File Input -->
                     <div class="border rounded p-3 mb-4 bg-light text-start border-dashed" style="border-style: dashed !important; border-width: 2px !important;">
@@ -26,9 +36,12 @@
                         <input class="form-control form-control-sm shadow-none" type="file" id="excel_file" name="excel_file" accept=".xlsx, .xls" required>
                     </div>
                     
-                    <button type="submit" class="btn btn-primary w-100 py-2 d-flex justify-content-center align-items-center gap-2 shadow-sm">
+                    <button type="submit" class="btn btn-primary w-100 py-2 d-flex justify-content-center align-items-center gap-2 shadow-sm" {% if not employees %}disabled{% endif %}>
                         <i class="bi bi-cloud-arrow-up-fill"></i> Upload & Process Pipeline
                     </button>
+                    {% if not employees %}
+                    <p class="text-muted small mt-3 mb-0">Create an active telecaller account before uploading contacts.</p>
+                    {% endif %}
                 </form>
             </div>
         </div>

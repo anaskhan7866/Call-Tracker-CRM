@@ -57,7 +57,8 @@ class LogoutReturnTests(TestCase):
 
 class ContactUploadTests(TestCase):
 	def setUp(self):
-		self.user = User.objects.create_user(username='uploader', password='test-password')
+		self.admin = User.objects.create_user(username='admin-uploader', password='test-password', is_staff=True)
+		self.user = User.objects.create_user(username='telecaller', password='test-password')
 		self.client.force_login(self.user)
 
 	def make_excel_file(self, rows):
@@ -68,6 +69,14 @@ class ContactUploadTests(TestCase):
 			file_buffer.getvalue(),
 			content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 		)
+
+	def test_upload_page_lists_telecallers_for_assignment(self):
+		self.client.force_login(self.admin)
+
+		response = self.client.get(reverse('upload_excel'))
+
+		self.assertContains(response, f'<option value="{self.user.id}">{self.user.username}</option>')
+		self.assertNotContains(response, f'<option value="{self.admin.id}">{self.admin.username}</option>')
 
 	def test_upload_appends_new_contacts_skips_duplicates_and_preserves_existing_data(self):
 		existing_contact = Contact.objects.create(
@@ -82,8 +91,12 @@ class ContactUploadTests(TestCase):
 			('New Contact', '2222222222'),
 			('Duplicate New Contact', '2222222222'),
 		])
+		self.client.force_login(self.admin)
 
-		response = self.client.post(reverse('upload_excel'), {'excel_file': excel_file})
+		response = self.client.post(reverse('upload_excel'), {
+			'excel_file': excel_file,
+			'user_id': self.user.id,
+		})
 
 		self.assertRedirects(response, reverse('contact_list'), fetch_redirect_response=False)
 		self.assertEqual(Contact.objects.count(), 2)
@@ -94,6 +107,17 @@ class ContactUploadTests(TestCase):
 		new_contact = Contact.objects.get(user=self.user, phone_number='2222222222')
 		self.assertEqual(new_contact.user, self.user)
 		self.assertEqual(new_contact.call_status, 'Pending')
+
+	def test_regular_user_cannot_upload_contacts(self):
+		excel_file = self.make_excel_file([('New Contact', '2222222222')])
+
+		response = self.client.post(reverse('upload_excel'), {
+			'excel_file': excel_file,
+			'user_id': self.user.id,
+		})
+
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(Contact.objects.exists())
 
 	def test_same_phone_can_be_uploaded_by_different_users(self):
 		other_user = User.objects.create_user(username='other-uploader', password='test-password')
@@ -107,7 +131,11 @@ class ContactUploadTests(TestCase):
 			('Repeated In My Upload', '3333333333'),
 		])
 
-		self.client.post(reverse('upload_excel'), {'excel_file': excel_file})
+		self.client.force_login(self.admin)
+		self.client.post(reverse('upload_excel'), {
+			'excel_file': excel_file,
+			'user_id': self.user.id,
+		})
 
 		self.assertEqual(Contact.objects.filter(phone_number='3333333333').count(), 2)
 		self.assertTrue(Contact.objects.filter(user=self.user, phone_number='3333333333').exists())

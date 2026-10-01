@@ -8,7 +8,7 @@ from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.db.models import Q, Count
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
@@ -79,9 +79,24 @@ def logout_view(request):
 @never_cache
 @login_required
 def upload_excel(request):
+    if not (request.user.is_staff or request.user.is_superuser):
+        return HttpResponseForbidden('Only admins can upload lead files.')
+
+    employees = User.objects.filter(
+        is_active=True,
+        is_staff=False,
+        is_superuser=False,
+    ).order_by('username')
+
     if request.method == 'POST':
         if 'excel_file' not in request.FILES:
             messages.error(request, "Please select a file to upload.")
+            return redirect('upload_excel')
+
+        try:
+            assigned_user = employees.get(pk=request.POST.get('user_id'))
+        except (User.DoesNotExist, ValueError, TypeError):
+            messages.error(request, "Please select an active telecaller to assign these contacts to.")
             return redirect('upload_excel')
             
         excel_file = request.FILES['excel_file']
@@ -98,16 +113,15 @@ def upload_excel(request):
                 messages.error(request, "Upload failed: The Excel file MUST contain 'Cx Name' and 'Contact' columns.")
                 return redirect('upload_excel')
 
-            # 1. OPTIMIZATION: Fetch existing phone numbers for this user into a fast-lookup set (1 Query)
+            # Fetch existing phone numbers for the selected telecaller into a fast-lookup set.
             existing_phones = set(
-                Contact.objects.filter(user=request.user).values_list('phone_number', flat=True)
+                Contact.objects.filter(user=assigned_user).values_list('phone_number', flat=True)
             )
             
             new_contacts = []
             phones_in_current_upload = set() 
             total_rows = 0
 
-            # 2. Iterate through rows in memory WITHOUT hitting the database
             for index, row in df.iterrows():
                 clean_name = " ".join(str(row.get('cx name', '')).split())
                 clean_phone = " ".join(str(row.get('contact', '')).split())
@@ -121,7 +135,7 @@ def upload_excel(request):
                 if clean_phone not in existing_phones and clean_phone not in phones_in_current_upload:
                     new_contacts.append(
                         Contact(
-                            user=request.user,
+                            user=assigned_user,
                             name=clean_name,
                             phone_number=clean_phone,
                             call_status='Pending'
@@ -129,7 +143,6 @@ def upload_excel(request):
                     )
                     phones_in_current_upload.add(clean_phone)
             
-            # 3. Insert all new records in a single database transaction (1 Query)
             if new_contacts:
                 Contact.objects.bulk_create(new_contacts, batch_size=1000)
 
@@ -143,7 +156,7 @@ def upload_excel(request):
             messages.error(request, f"Error processing file: {str(e)}")
             return redirect('upload_excel')
         
-    return render(request, 'upload.html')
+    return render(request, 'upload.html', {'employees': employees})
 
 
 @never_cache
