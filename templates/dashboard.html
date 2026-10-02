@@ -471,10 +471,6 @@
                     const statusValue = document.getElementById('dash_status_' + contactId).value;
                     const descValue = document.getElementById('dash_desc_' + contactId).value;
                     
-                    let newDate = new Date();
-                    newDate.setDate(newDate.getDate() + daysToAdd);
-                    const formattedDate = newDate.toISOString().split('T')[0];
-                    
                     const mainDropdownBtn = this.closest('.dropdown').querySelector('.dropdown-toggle');
                     mainDropdownBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
                     mainDropdownBtn.disabled = true;
@@ -489,7 +485,7 @@
                             id: contactId,
                             status: statusValue,
                             description: descValue,
-                            reminder_date: formattedDate 
+                            reminder_days: daysToAdd
                         })
                     })
                     .then(response => response.json())

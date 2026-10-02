@@ -2,6 +2,8 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
+from datetime import timedelta
 from io import BytesIO
 from unittest.mock import patch
 import pandas as pd
@@ -20,7 +22,12 @@ class LogoutReturnTests(TestCase):
 
 		self.assertEqual(
 			logout_response.url,
-			f"{reverse('login')}?next=%2Fcontacts%2F%3Fpage%3D3%26q%3DRavi",
+			f"{reverse('landing_page')}?next=%2Fcontacts%2F%3Fpage%3D3%26q%3DRavi",
+		)
+		landing_response = self.client.get(logout_response.url)
+		self.assertContains(
+			landing_response,
+			f'href="{reverse("login")}?next=/contacts/%3Fpage%3D3%26q%3DRavi"',
 		)
 
 		login_response = self.client.post(reverse('login'), {
@@ -51,7 +58,7 @@ class LogoutReturnTests(TestCase):
 
 		self.assertEqual(
 			response.url,
-			f"{reverse('login')}?next=%2Fcontacts%2F%3Fpage%3D3%26q%3DRavi",
+			f"{reverse('landing_page')}?next=%2Fcontacts%2F%3Fpage%3D3%26q%3DRavi",
 		)
 
 
@@ -225,7 +232,24 @@ class ContactCallLinkTests(TestCase):
 		response = self.client.get(reverse('contact_list'), {'page': '1'})
 
 		self.assertNotContains(response, 'href="tel:+9112345"')
+		self.assertNotContains(response, 'href="https://wa.me/')
 		self.assertContains(response, 'This contact has an invalid phone number')
+
+	def test_whatsapp_links_are_prepared_with_encoded_message_by_backend(self):
+		Contact.objects.create(
+			user=self.user,
+			name='Ravi & Sons',
+			phone_number='+91 98765-43210',
+		)
+
+		response = self.client.get(reverse('contact_list'), {'page': '1'})
+		groups = response.context['page_obj'][0].whatsapp_script_groups
+
+		self.assertEqual(groups[0]['items'][0]['url'].split('?')[0], 'https://wa.me/919876543210')
+		self.assertIn('Ravi+%26+Sons', groups[0]['items'][0]['url'])
+		self.assertEqual([item['label'] for item in groups[1]['items']], ['Indian Stock Trading', 'Forex Trading'])
+		self.assertContains(response, 'href="https://wa.me/919876543210?text=')
+		self.assertNotContains(response, 'we tried reaching you regarding our trading platform')
 
 
 class AJAXErrorHandlingTests(TestCase):
@@ -260,6 +284,47 @@ class AJAXErrorHandlingTests(TestCase):
 
 		self.assertEqual(response.status_code, 400)
 		self.assertEqual(response.json()['error'], 'Invalid contact ID.')
+
+	def test_auto_update_schedules_reminder_for_tomorrow(self):
+		contact = Contact.objects.create(
+			user=self.user,
+			name='Reminder Contact',
+			phone_number='5551234567',
+		)
+		tomorrow = timezone.localdate() + timedelta(days=1)
+
+		response = self.client.post(
+			reverse('auto_update_contact'),
+			data={'id': contact.id, 'reminder_days': 1},
+			content_type='application/json',
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()['reminder_date'], tomorrow.isoformat())
+		contact.refresh_from_db()
+		self.assertEqual(contact.reminder_date, tomorrow)
+
+		contact_list = self.client.get(reverse('contact_list'), {'page': '1'})
+		self.assertContains(contact_list, 'class="btn btn-sm btn-success w-100 reminder-toggle-btn"')
+		self.assertContains(contact_list, 'data-scheduled="true"')
+		self.assertNotContains(contact_list, 'type="date"')
+
+		done_response = self.client.post(
+			reverse('auto_update_contact'),
+			data={
+				'id': contact.id,
+				'status': 'Connected',
+				'description': '',
+				'reminder_date': '',
+			},
+			content_type='application/json',
+		)
+		self.assertEqual(done_response.status_code, 200)
+
+		contact_list = self.client.get(reverse('contact_list'), {'page': '1'})
+		self.assertNotContains(contact_list, 'data-scheduled="true"')
+		self.assertContains(contact_list, 'class="btn btn-sm btn-outline-primary reminder-toggle-btn w-100"')
+		self.assertContains(contact_list, 'data-scheduled="false"')
 
 	def test_daily_call_details_does_not_return_unexpected_exception_details(self):
 		admin = User.objects.create_user(

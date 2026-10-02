@@ -81,50 +81,42 @@
                             <textarea id="desc_{{ contact.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" rows="2" placeholder="Add notes...">{% if contact.description and contact.description != 'None' %}{{ contact.description }}{% endif %}</textarea>
                         </td>
                         <td>
-                            <input type="date" id="reminder_{{ contact.id }}" class="form-control form-control-sm bg-light border-0 shadow-none" value="{{ contact.reminder_date|date:'Y-m-d' }}">
+                            {% if contact.reminder_date %}
+                            <button type="button" class="btn btn-sm btn-success w-100 reminder-toggle-btn" data-id="{{ contact.id }}" data-scheduled="true">
+                                <i class="bi bi-check2"></i> Scheduled
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn btn-sm btn-outline-primary reminder-toggle-btn w-100" data-id="{{ contact.id }}" data-scheduled="false">
+                                <i class="bi bi-calendar-plus"></i> Tomorrow
+                            </button>
+                            {% endif %}
                         </td>
                         <td class="pe-4 text-center">
                             <div class="d-flex flex-column gap-2">
-                                <!-- Upgraded WhatsApp Dropdown Menu -->
+                                {% if contact.whatsapp_script_groups %}
                                 <div class="dropdown w-100">
                                     <button class="btn btn-sm btn-success text-white fw-semibold w-100 shadow-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                         <i class="bi bi-whatsapp"></i> Chat
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end shadow shadow-sm" style="font-size: 0.85rem;">
-                                        
-                                        <!-- Not Connected Script -->
-                                        <li><h6 class="dropdown-header text-danger fw-bold">Not Connected</h6></li>
-                                        <li>
-                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, we tried reaching you regarding our trading platform but couldn't connect. Please let me know a good time to call back!">
-                                                <i class="bi bi-telephone-x me-2 text-muted"></i>Send Missed Call Script
-                                            </a>
-                                        </li>
-                                        
-                                        <li><hr class="dropdown-divider"></li>
-                                        
-                                        <!-- Connected Market Scripts -->
-                                        <li><h6 class="dropdown-header text-success fw-bold">Connected (Select Market)</h6></li>
-                                        
-                                        <li>
-                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, as discussed today, here is the information and next steps for trading in the Indian Stock Market.">
-                                                <i class="bi bi-graph-up-arrow me-2 text-muted"></i>Indian Stock Market
-                                            </a>
-                                        </li>
-                                        
-                                        <li>
-                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, as discussed today, here is the information regarding Global / Forex Markets.">
-                                                <i class="bi bi-globe-americas me-2 text-muted"></i>Global / Absel Market
-                                            </a>
-                                        </li>
-                        
-                                        <li>
-                                            <a class="dropdown-item" target="_blank" href="https://wa.me/91{{ contact.phone_number }}?text=Hi {{ contact.name }}, as discussed today, here is the information regarding Cryptocurrency trading.">
-                                                <i class="bi bi-currency-bitcoin me-2 text-muted"></i>Crypto Market
-                                            </a>
-                                        </li>
-                                        
+                                        {% for group in contact.whatsapp_script_groups %}
+                                            {% if not forloop.first %}<li><hr class="dropdown-divider"></li>{% endif %}
+                                            <li><h6 class="dropdown-header {{ group.heading_class }} fw-bold">{{ group.heading }}</h6></li>
+                                            {% for item in group.items %}
+                                            <li>
+                                                <a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ item.url }}">
+                                                    <i class="bi {{ item.icon }} me-2 text-muted"></i>{{ item.label }}
+                                                </a>
+                                            </li>
+                                            {% endfor %}
+                                        {% endfor %}
                                     </ul>
                                 </div>
+                                {% else %}
+                                <button type="button" class="btn btn-sm btn-success text-white fw-semibold w-100 shadow-sm" disabled title="This contact has an invalid phone number">
+                                    <i class="bi bi-whatsapp"></i> Chat
+                                </button>
+                                {% endif %}
                                 
                                 <!-- Existing Save Button -->
                                 <button type="button" class="btn btn-sm btn-light text-primary fw-semibold save-row-btn w-100" data-id="{{ contact.id }}">
@@ -211,8 +203,6 @@
                 const contactId = this.dataset.id;
                 const statusValue = document.getElementById('status_' + contactId).value;
                 const descValue = document.getElementById('desc_' + contactId).value;
-                const reminderValue = document.getElementById('reminder_' + contactId).value;
-                
                 const originalText = this.innerHTML;
                 this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
                 this.disabled = true;
@@ -226,8 +216,7 @@
                     body: JSON.stringify({
                         id: contactId,
                         status: statusValue,
-                        description: descValue,
-                        reminder_date: reminderValue
+                        description: descValue
                     })
                 })
                 .then(response => response.json())
@@ -252,6 +241,53 @@
                         this.innerHTML = originalText;
                         this.disabled = false;
                     }
+                });
+            });
+        });
+
+        document.querySelectorAll('.reminder-toggle-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const contactId = this.dataset.id;
+            const isScheduled = this.dataset.scheduled === 'true';
+                const originalText = this.innerHTML;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                this.disabled = true;
+
+                fetch('{% url "auto_update_contact" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken
+                    },
+                    body: JSON.stringify(isScheduled
+                        ? { id: contactId, reminder_date: '' }
+                        : { id: contactId, reminder_days: 1 })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error || 'Unable to schedule reminder.');
+                    }
+
+                    if (isScheduled) {
+                        this.dataset.scheduled = 'false';
+                        this.innerHTML = '<i class="bi bi-calendar-plus"></i> Tomorrow';
+                        this.classList.replace('btn-success', 'btn-outline-primary');
+                    } else {
+                        this.dataset.scheduled = 'true';
+                        this.innerHTML = '<i class="bi bi-check2"></i> Scheduled';
+                        this.classList.replace('btn-outline-primary', 'btn-success');
+                    }
+                    this.disabled = false;
+                    document.getElementById('autosave-toast').classList.remove('d-none');
+                    setTimeout(() => {
+                        document.getElementById('autosave-toast').classList.add('d-none');
+                    }, 2000);
+                })
+                .catch(error => {
+                    alert(error.message);
+                    this.innerHTML = originalText;
+                    this.disabled = false;
                 });
             });
         });

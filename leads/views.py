@@ -2,7 +2,7 @@ import logging
 import pandas as pd
 import re
 import json
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import urlencode, urlsplit
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
@@ -41,6 +41,58 @@ def _india_phone_tel_uri(phone_number):
         return None
 
     return f'tel:+{digits}'
+
+
+def _whatsapp_script_groups(contact):
+    call_uri = _india_phone_tel_uri(contact.phone_number)
+    if not call_uri:
+        return []
+
+    whatsapp_number = call_uri.removeprefix('tel:+')
+    scripts = [
+        {
+            'heading': 'Not Connected',
+            'heading_class': 'text-danger',
+            'items': [
+                {
+                    'label': 'Send Missed Call Script',
+                    'icon': 'bi-telephone-x',
+                    'message': (
+                        f'Hi {contact.name}, we tried reaching you regarding our trading platform '
+                        'but couldn\'t connect. Please let me know a good time to call back!'
+                    ),
+                },
+            ],
+        },
+        {
+            'heading': 'Connected (Select Market)',
+            'heading_class': 'text-success',
+            'items': [
+                {
+                    'label': 'Indian Stock Trading',
+                    'icon': 'bi-graph-up-arrow',
+                    'message': (
+                        f'Hi {contact.name}, as discussed today, here is the information and next '
+                        'steps for trading in the Indian stock market.'
+                    ),
+                },
+                {
+                    'label': 'Forex Trading',
+                    'icon': 'bi-globe-americas',
+                    'message': (
+                        f'Hi {contact.name}, as discussed today, here is the information regarding '
+                        'forex trading.'
+                    ),
+                },
+            ],
+        },
+    ]
+
+    for group in scripts:
+        for item in group['items']:
+            item['url'] = f"https://wa.me/{whatsapp_number}?{urlencode({'text': item.pop('message')})}"
+
+    return scripts
 
 
 @require_POST
@@ -216,6 +268,7 @@ def contact_list(request):
     page_obj = paginator.get_page(page_number)
     for contact in page_obj:
         contact.call_uri = _india_phone_tel_uri(contact.phone_number)
+        contact.whatsapp_script_groups = _whatsapp_script_groups(contact)
 
     return render(request, 'contact_list.html', {'page_obj': page_obj, 'query': raw_query})
 
@@ -287,12 +340,20 @@ def auto_update_contact(request):
         if 'description' in data:
             contact.description = data['description']
 
-        if 'reminder_date' in data:
+        if 'reminder_days' in data:
+            reminder_days = data['reminder_days']
+            if type(reminder_days) is not int or reminder_days not in (1, 3, 7):
+                return JsonResponse({'success': False, 'error': 'Invalid reminder delay.'}, status=400)
+            contact.reminder_date = timezone.localdate() + timedelta(days=reminder_days)
+        elif 'reminder_date' in data:
             reminder_date = data['reminder_date']
             contact.reminder_date = reminder_date if reminder_date else None
 
         contact.save()
-        return JsonResponse({'success': True})
+        return JsonResponse({
+            'success': True,
+            'reminder_date': contact.reminder_date.isoformat() if contact.reminder_date else '',
+        })
     except Contact.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Contact not found.'}, status=404)
     except ValidationError:
