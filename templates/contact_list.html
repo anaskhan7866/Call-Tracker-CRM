@@ -58,7 +58,7 @@
                         <th class="text-secondary fw-semibold py-3 pe-4 text-center" style="font-size: 0.85rem; width: 150px;">ACTION</th>
                     </tr>
                 </thead>
-                <tbody class="border-top-0">
+                <tbody class="border-top-0" data-status-filter="{{ status_filter }}">
                     {% for contact in page_obj %}
                     <tr>
                         <td class="ps-4 fw-medium text-dark">{{ contact.name }}</td>
@@ -229,6 +229,15 @@
                 .then(response => response.json())
                 .then(data => {
                     if(data.success) {
+                        const tableBody = this.closest('tbody');
+                        if (tableBody.dataset.statusFilter === 'not_connected' && statusValue !== 'Not Connected') {
+                            this.closest('tr').remove();
+                            if (!tableBody.querySelector('tr')) {
+                                window.location.reload();
+                                return;
+                            }
+                        }
+
                         this.innerHTML = '<i class="bi bi-check2"></i>';
                         this.classList.replace('btn-light', 'btn-success');
                         this.classList.replace('text-primary', 'text-white');

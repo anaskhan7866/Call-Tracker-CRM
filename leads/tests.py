@@ -195,6 +195,34 @@ class ContactPageJumpTests(TestCase):
 		self.assertContains(response, 'href="tel:+915550000099"')
 		self.assertEqual(unanswered.reminder_date, timezone.localdate() + timedelta(days=1))
 
+	def test_saving_connected_status_removes_contact_from_not_connected_queue(self):
+		contact = Contact.objects.create(
+			user=self.user,
+			name='Returned Call',
+			phone_number='5550000102',
+			call_status='Not Connected',
+		)
+
+		save_response = self.client.post(
+			reverse('auto_update_contact'),
+			data={
+				'id': contact.id,
+				'status': 'Connected',
+				'description': 'Discussed next steps',
+			},
+			content_type='application/json',
+		)
+
+		self.assertEqual(save_response.status_code, 200)
+		contact.refresh_from_db()
+		self.assertEqual(contact.call_status, 'Connected')
+		self.assertEqual(contact.description, 'Discussed next steps')
+
+		queue_response = self.client.get(reverse('contact_list'), {'status': 'not_connected'})
+
+		self.assertEqual(list(queue_response.context['page_obj'].object_list), [])
+		self.assertContains(queue_response, 'data-status-filter="not_connected"')
+
 	def test_admin_login_with_contacts_next_url_lands_on_dashboard(self):
 		admin = User.objects.create_user(
 			username='admin-caller',
