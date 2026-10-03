@@ -220,6 +220,7 @@ def contact_list(request):
     # 1. If user clicks "Clear", wipe the search query and restore the pre-search page
     if 'clear' in request.GET:
         request.session['last_query'] = ''
+        request.session['last_status'] = ''
         restore_page = request.session.get('pre_search_page', 1)
         return redirect(f"/contacts/?page={restore_page}")
 
@@ -227,15 +228,19 @@ def contact_list(request):
     if not request.GET and 'last_page' in request.session:
         last_page = request.session.get('last_page', 1)
         last_query = request.session.get('last_query', '')
+        last_status = request.session.get('last_status', '')
         
         redirect_url = f"/contacts/?page={last_page}"
         if last_query:
             redirect_url += f"&q={last_query}"
+        if last_status:
+            redirect_url += f"&status={last_status}"
         return redirect(redirect_url)
 
     # 3. Process the current request
     raw_query = request.GET.get('q', '')
     page_number = request.GET.get('page', 1)
+    status_filter = 'not_connected' if request.GET.get('status') == 'not_connected' else ''
     
     # If they are NOT searching right now, save this page as the safe return point
     if not raw_query:
@@ -243,6 +248,7 @@ def contact_list(request):
         
     request.session['last_query'] = raw_query
     request.session['last_page'] = page_number
+    request.session['last_status'] = status_filter
     
     cleaned_query = " ".join(raw_query.split())
     
@@ -264,13 +270,20 @@ def contact_list(request):
     else:
         contacts = base_contacts.order_by('id')
 
+    if status_filter == 'not_connected':
+        contacts = contacts.filter(call_status='Not Connected')
+
     paginator = Paginator(contacts, 10)
     page_obj = paginator.get_page(page_number)
     for contact in page_obj:
         contact.call_uri = _india_phone_tel_uri(contact.phone_number)
         contact.whatsapp_script_groups = _whatsapp_script_groups(contact)
 
-    return render(request, 'contact_list.html', {'page_obj': page_obj, 'query': raw_query})
+    return render(request, 'contact_list.html', {
+        'page_obj': page_obj,
+        'query': raw_query,
+        'status_filter': status_filter,
+    })
 
 @never_cache
 @login_required

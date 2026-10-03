@@ -166,6 +166,35 @@ class ContactPageJumpTests(TestCase):
 		self.assertContains(response, 'name="q" value="Ravi"')
 		self.assertContains(response, 'name="page" min="1" max="2" value="2"')
 
+	def test_not_connected_queue_only_shows_callers_active_unanswered_leads(self):
+		unanswered = Contact.objects.create(
+			user=self.user,
+			name='Missed Call',
+			phone_number='5550000099',
+			call_status='Not Connected',
+			reminder_date=timezone.localdate() + timedelta(days=1),
+		)
+		Contact.objects.create(
+			user=self.user,
+			name='Connected Lead',
+			phone_number='5550000100',
+			call_status='Connected',
+		)
+		other_user = User.objects.create_user(username='another-caller', password='test-password')
+		Contact.objects.create(
+			user=other_user,
+			name='Other Caller Missed Call',
+			phone_number='5550000101',
+			call_status='Not Connected',
+		)
+
+		response = self.client.get(reverse('contact_list'), {'status': 'not_connected'})
+
+		self.assertEqual(list(response.context['page_obj'].object_list), [unanswered])
+		self.assertContains(response, 'Call again: Not connected')
+		self.assertContains(response, 'href="tel:+915550000099"')
+		self.assertEqual(unanswered.reminder_date, timezone.localdate() + timedelta(days=1))
+
 	def test_admin_login_with_contacts_next_url_lands_on_dashboard(self):
 		admin = User.objects.create_user(
 			username='admin-caller',
@@ -210,6 +239,7 @@ class TelecallerDashboardKpiTests(TestCase):
 		self.assertEqual(response.context['connected_leads'], 1)
 		self.assertEqual(response.context['not_connected_leads'], 0)
 		self.assertContains(response, 'Pending')
+		self.assertContains(response, f'href="{reverse("contact_list")}?status=not_connected"')
 
 
 class ContactCallLinkTests(TestCase):

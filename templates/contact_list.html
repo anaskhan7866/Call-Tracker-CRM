@@ -11,6 +11,7 @@
     <div class="d-flex gap-2 align-items-center">
         <!-- Upgraded Search Bar with Icon & Button -->
         <form method="GET" action="" class="d-flex gap-2 align-items-center">
+            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
             <div class="position-relative">
                 <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
                 <input type="text" name="q" class="form-control ps-5 rounded-pill shadow-sm" style="width: 250px;" value="{{ query }}" placeholder="Search Cx Name...">
@@ -30,6 +31,11 @@
             <i class="bi bi-file-earmark-excel"></i> Export
         </a>
     </div>
+</div>
+
+<div class="btn-group mb-3" role="group" aria-label="Lead status filter">
+    <a href="{% url 'contact_list' %}?status=all{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn {% if not status_filter %}btn-primary{% else %}btn-outline-primary{% endif %}">All leads</a>
+    <a href="{% url 'contact_list' %}?status=not_connected{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn {% if status_filter == 'not_connected' %}btn-primary{% else %}btn-outline-primary{% endif %}">Call again: Not connected</a>
 </div>
 
 <!-- Auto-Save Notification Toast -->
@@ -145,7 +151,7 @@
                 <ul class="pagination justify-content-center mb-0">
                     {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link shadow-sm text-dark border-0 rounded ms-1" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}">
+                            <a class="page-link shadow-sm text-dark border-0 rounded ms-1" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
                                 <i class="bi bi-chevron-left"></i> Prev
                             </a>
                         </li>
@@ -159,7 +165,7 @@
 
                     {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link shadow-sm text-dark border-0 rounded me-1" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}">
+                            <a class="page-link shadow-sm text-dark border-0 rounded me-1" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
                                 Next <i class="bi bi-chevron-right"></i>
                             </a>
                         </li>
@@ -171,6 +177,7 @@
 
             <form method="GET" action="{% url 'contact_list' %}" class="d-flex align-items-center gap-2">
                 {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
                 <label for="page-jump" class="small text-muted mb-0">Go to page</label>
                 <input id="page-jump" class="form-control form-control-sm" type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" value="{{ page_obj.number }}" required style="width: 5rem;">
                 <button type="submit" class="btn btn-sm btn-primary" aria-label="Go to selected page">Go</button>
