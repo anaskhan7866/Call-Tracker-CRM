@@ -2,8 +2,9 @@ import logging
 import pandas as pd
 import re
 import json
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from urllib.parse import urlencode, urlsplit
+from django.core.cache import cache
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
@@ -407,6 +408,8 @@ def export_excel(request):
 @login_required
 def dashboard(request):
     today = timezone.localdate()
+    start_of_today = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+    end_of_today = start_of_today + timedelta(days=1)
 
     if request.user.is_staff or request.user.is_superuser:
         # --- ADMIN DASHBOARD ---
@@ -415,63 +418,75 @@ def dashboard(request):
         search_results = None
         
         if search_query:
-            
             search_results = Contact.objects.filter(
-            # Matches if the name starts with the query OR if the query appears as a separate word (with a space)
-            Q(name__istartswith=search_query) | 
-            Q(name__icontains=f" {search_query}") | 
-            Q(phone_number__icontains=search_query)
-        ).select_related('user').order_by('-last_updated')[:50]
+                # Matches if the name starts with the query OR if the query appears as a separate word (with a space)
+                Q(name__istartswith=search_query) | 
+                Q(name__icontains=f" {search_query}") | 
+                Q(phone_number__icontains=search_query)
+            ).select_related('user').order_by('-last_updated')[:50]
 
-        # Calculate company-wide aggregate totals
-        company_stats = Contact.objects.aggregate(
-            total_leads=Count('id'),
-            pending=Count('id', filter=Q(call_status='Pending')),
-            total_called=Count('id', filter=~Q(call_status='Pending')),
-            called_today=Count('id', filter=~Q(call_status='Pending') & Q(last_updated__date=today)),
-            connected=Count('id', filter=Q(call_status='Connected')),
-            not_connected=Count('id', filter=Q(call_status='Not Connected'))
-        )
+        # Use caching for expensive admin dashboard queries to avoid 3+ second page loads
+        # Cache key based on whether we are searching (we don't cache search results)
+        cache_key = 'admin_dashboard_stats'
+        cached_data = cache.get(cache_key)
 
-        # Employee metrics
-        employees = User.objects.filter(is_superuser=False, is_staff=False).annotate(
-            total_leads=Count('contact'),
-            pending=Count('contact', filter=Q(contact__call_status='Pending')),
-            total_called=Count('contact', filter=~Q(contact__call_status='Pending')),
-            called_today=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__last_updated__date=today)),
-            connected=Count('contact', filter=Q(contact__call_status='Connected')),
-            not_connected=Count('contact', filter=Q(contact__call_status='Not Connected'))
-        ).order_by('username')
-        
-        # Daily history
-        daily_history_raw = Contact.objects.filter(
-            ~Q(call_status='Pending'), 
-            last_updated__isnull=False
-        ).annotate(
-            date=TruncDate('last_updated')
-        ).values('user__id', 'date').annotate(
-            daily_calls=Count('id')
-        ).order_by('-date')
-        
-        history_by_user = {}
-        for entry in daily_history_raw:
-            uid = entry['user__id']
-            if uid not in history_by_user:
-                history_by_user[uid] = []
-            history_by_user[uid].append({
-                'date': entry['date'],
-                'calls': entry['daily_calls']
-            })
+        if cached_data is None:
+            # Calculate company-wide aggregate totals
+            company_stats = Contact.objects.aggregate(
+                total_leads=Count('id'),
+                pending=Count('id', filter=Q(call_status='Pending')),
+                total_called=Count('id', filter=~Q(call_status='Pending')),
+                called_today=Count('id', filter=~Q(call_status='Pending') & Q(last_updated__gte=start_of_today) & Q(last_updated__lt=end_of_today)),
+                connected=Count('id', filter=Q(call_status='Connected')),
+                not_connected=Count('id', filter=Q(call_status='Not Connected'))
+            )
+
+            # Employee metrics
+            employees = list(User.objects.filter(is_superuser=False, is_staff=False).annotate(
+                total_leads=Count('contact'),
+                pending=Count('contact', filter=Q(contact__call_status='Pending')),
+                total_called=Count('contact', filter=~Q(contact__call_status='Pending')),
+                called_today=Count('contact', filter=~Q(contact__call_status='Pending') & Q(contact__last_updated__gte=start_of_today) & Q(contact__last_updated__lt=end_of_today)),
+                connected=Count('contact', filter=Q(contact__call_status='Connected')),
+                not_connected=Count('contact', filter=Q(contact__call_status='Not Connected'))
+            ).order_by('username'))
             
-        for emp in employees:
-            emp.daily_history = history_by_user.get(emp.id, [])
+            # Daily history
+            daily_history_raw = Contact.objects.filter(
+                ~Q(call_status='Pending'), 
+                last_updated__isnull=False
+            ).annotate(
+                date=TruncDate('last_updated')
+            ).values('user__id', 'date').annotate(
+                daily_calls=Count('id')
+            ).order_by('-date')
             
+            history_by_user = {}
+            for entry in daily_history_raw:
+                uid = entry['user__id']
+                if uid not in history_by_user:
+                    history_by_user[uid] = []
+                history_by_user[uid].append({
+                    'date': entry['date'],
+                    'calls': entry['daily_calls']
+                })
+                
+            for emp in employees:
+                emp.daily_history = history_by_user.get(emp.id, [])
+
+            cached_data = {
+                'company_stats': company_stats,
+                'employees': employees,
+            }
+            # Cache the heavily processed data for 60 seconds.
+            cache.set(cache_key, cached_data, 60)
+
         context = {
             'is_admin': True,
-            'employees': employees,
+            'employees': cached_data['employees'],
             'search_query': search_query,
             'search_results': search_results,
-            'company_stats': company_stats,
+            'company_stats': cached_data['company_stats'],
         }
         return render(request, 'dashboard.html', context)
         
@@ -518,10 +533,15 @@ def get_daily_call_details(request):
         return JsonResponse({'success': False, 'error': 'Invalid user or date.'}, status=400)
     
     try:
+        start_of_day = timezone.make_aware(datetime.combine(call_date, datetime.min.time()))
+        end_of_day = start_of_day + timedelta(days=1)
+
         # FIX: Removed .values() so Django formats the SQLite datetime correctly
+        # FIX: Use range instead of __date to allow PostgreSQL to use the database index
         calls = Contact.objects.filter(
             user_id=user_id,
-            last_updated__date=call_date
+            last_updated__gte=start_of_day,
+            last_updated__lt=end_of_day
         ).exclude(call_status='Pending').order_by('-last_updated')
         
         call_list = []
