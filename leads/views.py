@@ -202,6 +202,9 @@ def upload_excel(request):
             added_count = len(new_contacts)
             skipped_count = total_rows - added_count
             
+            # Clear the dashboard cache so the admin immediately sees the newly uploaded leads
+            cache.delete('admin_dashboard_stats')
+            
             messages.success(request, f"Successfully added {added_count} new contacts! ({skipped_count} duplicates skipped).")
             return redirect('contact_list')
             
