@@ -182,6 +182,10 @@ def upload_excel(request):
                 if not clean_phone:
                     continue
                     
+                # FIX: Remove the trailing '.0' that pandas adds when Excel treats phone numbers as floats
+                if clean_phone.endswith('.0') and clean_phone[:-2].isdigit():
+                    clean_phone = clean_phone[:-2]
+                    
                 total_rows += 1
 
                 # If phone is completely new (not in DB, and not already seen in this file)
@@ -389,6 +393,21 @@ def export_excel(request):
         contacts = Contact.objects.all()
     else:
         contacts = Contact.objects.filter(user=request.user, is_active=True)
+        
+    # FIX: Ensure export respects the user's active search and status filters
+    raw_query = request.GET.get('q', '')
+    status_filter = request.GET.get('status', '')
+    
+    cleaned_query = " ".join(raw_query.split())
+    if cleaned_query:
+        escaped_query = re.escape(cleaned_query)
+        regex_pattern = rf'^{escaped_query}[^a-zA-Z0-9]*$'
+        contacts = contacts.filter(
+            Q(name__iregex=regex_pattern) | Q(phone_number__icontains=cleaned_query)
+        ).order_by('id')
+        
+    if status_filter == 'not_connected':
+        contacts = contacts.filter(call_status='Not Connected')
         
     contacts = contacts.values('name', 'phone_number', 'call_status', 'description')
     df = pd.DataFrame(list(contacts))

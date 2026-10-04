@@ -27,7 +27,7 @@
             {% endif %}
         </form>
 
-        <a href="{% url 'export_excel' %}" class="btn btn-success rounded-pill shadow-sm d-flex align-items-center gap-2">
+        <a href="{% url 'export_excel' %}?{% if query %}q={{ query|urlencode }}{% endif %}{% if status_filter %}{% if query %}&{% endif %}status={{ status_filter }}{% endif %}" class="btn btn-success rounded-pill shadow-sm d-flex align-items-center gap-2">
             <i class="bi bi-file-earmark-excel"></i> Export
         </a>
     </div>
