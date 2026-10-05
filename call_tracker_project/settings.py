@@ -107,6 +107,15 @@ if 'DATABASE_URL' in os.environ:
         conn_health_checks=True,
     )
 
+# Cache
+# https://docs.djangoproject.com/en/6.1/topics/cache/
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'dashboard-cache',
+    }
+}
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

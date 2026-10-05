@@ -263,7 +263,7 @@ def contact_list(request):
     
     # Admins see all contacts, normal users only see their own
     if request.user.is_staff or request.user.is_superuser:
-        base_contacts = Contact.objects.all()
+        base_contacts = Contact.objects.select_related('user').all()
     else:
         base_contacts = Contact.objects.filter(user=request.user, is_active=True)
     
@@ -303,7 +303,7 @@ def update_contacts(request):
         
         # Determine base queryset for security
         if request.user.is_staff or request.user.is_superuser:
-            base_contacts = Contact.objects.all()
+            base_contacts = Contact.objects.select_related('user').all()
         else:
             base_contacts = Contact.objects.filter(user=request.user, is_active=True)
             
@@ -391,7 +391,7 @@ def auto_update_contact(request):
 @login_required
 def export_excel(request):
     if request.user.is_staff or request.user.is_superuser:
-        contacts = Contact.objects.all()
+        contacts = Contact.objects.select_related('user').all()
     else:
         contacts = Contact.objects.filter(user=request.user, is_active=True)
         
