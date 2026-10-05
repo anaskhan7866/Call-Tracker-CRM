@@ -314,7 +314,7 @@ def update_contacts(request):
                     contact.call_status = value
                     contact.description = request.POST.get(f'desc_{contact_id}', '')
                     contact.save()
-                except Contact.DoesNotExist:
+                except (Contact.DoesNotExist, ValueError):
                     pass
         
         messages.success(request, "Contact statuses updated successfully!")            
@@ -410,15 +410,16 @@ def export_excel(request):
         contacts = contacts.filter(call_status='Not Connected')
         
     contacts = contacts.values('name', 'phone_number', 'call_status', 'description')
-    df = pd.DataFrame(list(contacts))
     
-    if not df.empty:
-        df.rename(columns={
-            'name': 'Cx Name', 
-            'phone_number': 'Contact', 
-            'call_status': 'Call Status', 
-            'description': 'Description'
-        }, inplace=True)
+    # Initialize DataFrame with explicit columns so headers are always present, even if empty
+    df = pd.DataFrame(list(contacts), columns=['name', 'phone_number', 'call_status', 'description'])
+    
+    df.rename(columns={
+        'name': 'Cx Name', 
+        'phone_number': 'Contact', 
+        'call_status': 'Call Status', 
+        'description': 'Description'
+    }, inplace=True)
     
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="updated_leads.xlsx"'
