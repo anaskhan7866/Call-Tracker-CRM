@@ -4,6 +4,7 @@ import re
 import json
 from datetime import date, timedelta, datetime
 from urllib.parse import urlencode, urlsplit
+from django.conf import settings
 from django.core.cache import cache
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
@@ -451,7 +452,12 @@ def dashboard(request):
         # Use caching for expensive admin dashboard queries to avoid 3+ second page loads
         # Cache key based on whether we are searching (we don't cache search results)
         cache_key = 'admin_dashboard_stats'
-        cached_data = cache.get(cache_key)
+        
+        # Bypass cache in local development so you can see real-time changes instantly
+        if settings.DEBUG:
+            cached_data = None
+        else:
+            cached_data = cache.get(cache_key)
 
         if cached_data is None:
             # Calculate company-wide aggregate totals
@@ -474,10 +480,11 @@ def dashboard(request):
                 not_connected=Count('contact', filter=Q(contact__call_status='Not Connected'))
             ).order_by('username'))
             
-            # Daily history
+            # Daily history (last 30 days only to prevent long query times as DB grows)
+            thirty_days_ago = start_of_today - timedelta(days=30)
             daily_history_raw = Contact.objects.filter(
                 ~Q(call_status='Pending'), 
-                last_updated__isnull=False
+                last_updated__gte=thirty_days_ago
             ).annotate(
                 date=TruncDate('last_updated')
             ).values('user__id', 'date').annotate(

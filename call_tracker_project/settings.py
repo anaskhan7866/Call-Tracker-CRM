@@ -145,6 +145,15 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Only use WhiteNoise's manifest storage in production (when DATABASE_URL is present). 
+# This prevents 500 errors in local development even if DEBUG=False.
+if 'DATABASE_URL' in os.environ:
+    STORAGES = {
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
