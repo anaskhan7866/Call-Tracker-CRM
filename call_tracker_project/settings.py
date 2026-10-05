@@ -39,6 +39,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'fallback-dev-key')
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+CSRF_TRUSTED_ORIGINS = ['https://call-tracker-crm.onrender.com', 'https://call-tracker-crm-06.onrender.com']
 
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
@@ -159,7 +160,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 if 'DATABASE_URL' in os.environ:
     STORAGES = {
         "staticfiles": {
-            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+            "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
         },
     }
 
